@@ -1,0 +1,49 @@
+{
+  "name": "tomoe",
+  "version": "0.1.0",
+  "description": "Tomoe — The art of perfect balance",
+  "author": "Nanasi",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./types": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/types/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4",
+    "@vitest/coverage-v8": "^3.2.4",
+    "typescript": "^5.9.2",
+    "@types/node": "^20.18.0"
+  },
+  "keywords": [
+    "tomoe",
+    "web",
+    "framework",
+    "router",
+    "http",
+    "typescript",
+    "performance",
+    "web-standards"
+  ]
+}

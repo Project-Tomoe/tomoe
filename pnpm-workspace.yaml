@@ -1,3 +1,15 @@
 packages:
+  # Core Tomoe packages
   - "packages/*"
+
+  # Runtime adapters e.g. Node, Bun, Deno, Cloudflare, etc
+  - "runtimes/*"
+
+  # Middleware Packages
+  - "middleware/*"
+
+  # Documentation and Examples
   - "apps/*"
+
+  # Benchmarks (not part of main workspace)
+  - "benchmarks"
