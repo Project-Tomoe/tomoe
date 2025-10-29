@@ -5,7 +5,6 @@
   },
   "linter": {
     "enabled": true,
-    "recommended": true,
     "rules": {
       "suspicious": {
         "noExplicitAny": "error",
@@ -28,7 +27,7 @@
   },
   "javascript": {
     "formatter": {
-      "quoteStyle": "single",
+      "quoteStyle": "double",
       "semicolons": "asNeeded",
       "trailingCommas": "es5"
     }
