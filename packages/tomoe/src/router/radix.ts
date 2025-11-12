@@ -71,11 +71,12 @@ export class RadixTree {
    */
   insert(method: string, path: string, handler: InternalHandler) {
     const segments = this.#splitPath(path);
+    const methodAsUpper = method.toUpperCase();
 
     const isStatic = !path.includes(":") && !path.includes("*");
 
     if (isStatic) {
-      const key = `${method}:${path}`;
+      const key = `${methodAsUpper}:${path}`;
       this.#staticRoutes.set(key, handler);
     }
 
@@ -92,9 +93,8 @@ export class RadixTree {
           node.paramChild.paramName = paramName;
         } else if (node.paramChild.paramName !== paramName) {
           console.warn(
-            `Paramter name conflict at ${path}: `,
-            `existing "${node.paramChild.paramName}", new ${paramName} `,
-            "Using existing",
+            `Parameter name conflict at ${path}: ` +
+              `existing "${node.paramChild.paramName}", new ${paramName} Using existing`,
           );
         }
 
@@ -117,11 +117,11 @@ export class RadixTree {
       }
     }
 
-    if (node.hasHandler(method)) {
+    if (node.hasHandler(methodAsUpper)) {
       console.warn(`Route already registered ${method} ${path}. Overwriting.`);
     }
 
-    node.addHandler(method, handler);
+    node.addHandler(methodAsUpper, handler);
   }
 
   /**
@@ -132,7 +132,8 @@ export class RadixTree {
    * @returns Match result or null
    */
   match(method: string, path: string): MatchResult | null {
-    const staticKey = `${method}:${path}`;
+    const methodAsUpper = method.toUpperCase();
+    const staticKey = `${methodAsUpper}:${path}`;
     const staticHandler = this.#staticRoutes.get(staticKey);
 
     if (staticHandler) {
@@ -149,6 +150,7 @@ export class RadixTree {
 
     for (let i = 0; i < segments.length; i++) {
       const segment = segments[i];
+      const remainingSegments = segments.length - i;
 
       if (node.hasChildren()) {
         const child = node.getChild(segment as string);
@@ -159,7 +161,7 @@ export class RadixTree {
         }
       }
 
-      if (node.paramChild) {
+      if (node.paramChild && remainingSegments === 1) {
         const paramName = node.paramChild.paramName;
         if (paramName) {
           params[paramName] = segment as string;
@@ -176,10 +178,19 @@ export class RadixTree {
         break;
       }
 
+      if (node.paramChild) {
+        const paramName = node.paramChild.paramName;
+        if (paramName) {
+          params[paramName] = segment as string;
+          node = node.paramChild;
+          continue;
+        }
+      }
+
       return null;
     }
 
-    const handler = node.getHandler(method);
+    const handler = node.getHandler(methodAsUpper);
 
     if (!handler) {
       return null;
@@ -197,7 +208,7 @@ export class RadixTree {
   getRoutes(): Array<{ method: string; path: string }> {
     const routes: Array<{ method: string; path: string }> = [];
     const traverse = (node: RadixNode, pathParts: string[]) => {
-      const path = `/ + ${pathParts.join("/")}`;
+      const path = `/${pathParts.join("/")}`;
 
       if (node.handlers) {
         for (const method of node.handlers.keys()) {
