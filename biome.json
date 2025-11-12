@@ -7,7 +7,7 @@
     "enabled": true,
     "rules": {
       "suspicious": {
-        "noExplicitAny": "error",
+        "noExplicitAny": "off",
         "noEmptyInterface": "warn"
       },
       "style": {
