@@ -70,6 +70,7 @@ export class RadixTree {
    * @param handler - InternalHandler Function
    */
   insert(method: string, path: string, handler: InternalHandler) {
+    //TODO: decode param (for Unicode URL)
     const segments = this.#splitPath(path);
     const methodAsUpper = method.toUpperCase();
 
