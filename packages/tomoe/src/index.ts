@@ -16,6 +16,11 @@
  * ````
  */
 
+export { Tomoe, Router } from "./tomoe";
+
+// Router types
+export type { Handler, Middleware, HTTPMethod } from "./router/router";
+
 // Core exports
 export { Context } from "./context";
 export type { Env, ExecutionContext } from "./context";
@@ -36,12 +41,6 @@ export type {
   HasWildcard,
   IsStaticPath,
 } from "./types/inference";
-
-// TODO: Export Tomoe class
-// export { Tomoe } from "./tomoe"
-
-// TODO: Export Router
-// export { Router } from "./router"
 
 // Package version (for debugging)
 export const VERSION = "0.1.0";
