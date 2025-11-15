@@ -12,7 +12,7 @@
  */
 
 import { describe, it, vi, beforeEach, expect } from "vitest";
-import { type Handler, Middleware, Router } from "../../../src";
+import { type Handler, type Middleware, Router } from "../../../src";
 
 describe("Router", () => {
   let router: Router;
