@@ -10,7 +10,7 @@
 Tomoe is a lightweight backend framework built on **Web Standard APIs**, designed to bring clarity and performance together through a clean and predictable architecture.
 
 - 🌿 Minimal and expressive  
-- ⚡ High performance by design  
+- ⚡ High performance by design  and Type-Safe
 - 🧩 Middleware-oriented  
 - 🌐 Built on Web Standards — currently compatible with **Bun**, with more runtimes planned  
 
