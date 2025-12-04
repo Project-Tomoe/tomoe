@@ -37,7 +37,7 @@ app.get("/health", (c) => {
 
 // Global logger
 app.use("*", async (c, next) => {
-  console.log(`[${c.request.method}] ${c.request.url}`);
+  console.log(`[${c.req.method}] ${c.req.url}`);
   return next();
 });
 
