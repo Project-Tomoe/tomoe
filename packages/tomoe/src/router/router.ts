@@ -1,244 +1,256 @@
-/**
- * Router - Main routing class for Tomoe
- *
- * Provides user-facing API for route registration and request handling.
- * Wraps RadixTree for efficient route matching.
- *
- * Features:
- *  - Type-safe route params (inferred from path)
- *  - Middleware support with type accumulation
- *  - Chainable API
- *  - Multi-method support (GET, POST, PUT, DELETE, PATCH)
- *  - Native Web Standards
- */
-
 import { Context, type Env } from "../context";
 import type { ParamsObject } from "../types/inference";
 import { RadixTree } from "./radix";
 
-/**
- * Handler Fn signature
- *
- * @param c - Context with environment E and params P
- * @return Response or Promise<Response>
- *
- * Type paramters:
- *  - E: Environment object (from Middleware)
- *  - P - Route paramters (from path string)
- */
 export type Handler<
-  E extends Env = {},
-  P extends Record<string, string> = {},
+  E extends Env = Env,
+  P extends Record<string, string> = Record<string, never>,
 > = (c: Context<E, P>) => Response | Promise<Response>;
 
-/**
- * Middleware Fn signature
- *
- * Middleware can:
- *  - Modify request/response
- *  - Add properties to context (via c.set())
- *  - Short-circuit (return response without calling next)
- *  - Continue to next middleware/handler (call next())
- *
- * @param c - Context with current environment
- * @param next - Fn to call next Middleware/handler
- * @returns Response | Promise<Response>
- *
- * Type paramters:
- *  - EnvIn: Input environment (what middleware receives)
- *  - EnvOut: Output environment (what middleware adds)
- */
-export type Middleware<EnvIn extends Env = {}, EnvOut extends Env = {}> = (
-  c: Context,
+export type Middleware<E extends Env = any> = (
+  c: Context<E>,
   next: () => Promise<Response>,
 ) => Promise<Response>;
 
-/**
- * HTTP Methods supported by Tomoe
- */
+export type HTTPMethod = "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
 
-export type HTTPMethod =
-  | "GET"
-  | "POST"
-  | "PUT"
-  | "PATCH"
-  | "DELETE"
-  | "OPTION"
-  | "HEAD";
+type AnyMiddleware = Middleware<any>;
 
-/**
- * Router class
- *
- * Main class for building Tomoe application.
- *
- * Type paramter:
- *  - E: Environment object (accumulated through middleware)
- */
+const mwIdMap = new WeakMap<AnyMiddleware, string>();
+let mwCounter = 0;
 
-export class Router<E extends Env = {}> {
+const getMwId = (fn: Middleware): string => {
+  let id = mwIdMap.get(fn);
+
+  if (!id) {
+    id = `mw_${mwCounter++}`;
+    mwIdMap.set(fn, id);
+  }
+
+  return id;
+};
+
+export class Router<E extends Env = Env> {
   /**
-   * RadixTree for route storage and matching
+   * The Engine: Your RadixTree
+   * It now holds the FINAL optimized functions, not raw handlers.
    */
   #tree: RadixTree;
 
   /**
-   * Middleware stack (Applied in order before route handler)
+   * Staging Area: Raw Middlewares
+   * We store them here until compile time.
    */
-  #middleware: Middleware<any, any>[];
+  #middlewares: Array<{ path: string; handler: Middleware }>;
 
   /**
-   * Base environment object
-   * Set during route creation, passed to all handlers
+   * Staging Area: Raw Routes
+   * We store them here until compile time.
    */
+  #routes: Array<{ method: HTTPMethod; path: string; handler: Handler }>;
+
+  /**
+   * The Cache: Shared Chains
+   * Key: "mw_1|mw_5" (Unique ID String)
+   * Value: The optimized Runner function
+   */
+  #chainCache: Map<string, (c: Context, final: Handler) => any>;
+
+  /**
+   * Compilation State Flag
+   */
+  #isCompiled = false;
+
   #env: E;
 
   constructor(env: E = {} as E) {
     this.#tree = new RadixTree();
-    this.#middleware = [];
+    this.#middlewares = [];
+    this.#routes = [];
+    this.#chainCache = new Map();
     this.#env = env;
+
+    ["GET", "POST", "PUT", "DELETE", "PATCH"].forEach((m) => {
+      const method = m as HTTPMethod;
+      // @ts-ignore
+      (this as any)[method.toLowerCase()] = <Path extends string>(
+        path: Path,
+        handler: Handler<E, ParamsObject<Path>>,
+      ) => {
+        this.#routes.push({ method, path, handler: handler as any });
+        return this;
+      };
+    });
+  }
+
+  declare get: <Path extends string>(
+    path: Path,
+    handler: Handler<E, ParamsObject<Path>>,
+  ) => this;
+  declare post: <Path extends string>(
+    path: Path,
+    handler: Handler<E, ParamsObject<Path>>,
+  ) => this;
+  declare put: <Path extends string>(
+    path: Path,
+    handler: Handler<E, ParamsObject<Path>>,
+  ) => this;
+  declare delete: <Path extends string>(
+    path: Path,
+    handler: Handler<E, ParamsObject<Path>>,
+  ) => this;
+  declare patch: <Path extends string>(
+    path: string,
+    handler: Handler<E, ParamsObject<Path>>,
+  ) => this;
+
+  use(handler: Middleware<E>): this;
+  use(path: string, handler: Middleware<E>): this;
+  use(arg1: string | Middleware<E>, arg2?: Middleware<E>): Router<E> {
+    let path = "*";
+    let handler: Middleware<E>;
+
+    if (typeof arg1 === "string") {
+      path = arg1;
+
+      if (!arg2) {
+        throw new Error("Middleware must provided when a path is specified. ");
+      }
+
+      handler = arg2;
+    } else {
+      handler = arg1;
+    }
+
+    this.#middlewares.push({ path, handler });
+    return this;
   }
 
   /**
-   * Register route (GET, POST, PUT, POST, PATCH, DELETE)
-   *
-   * @param path - Route path (e.g., "/anime")
-   * @param handler - handler function
-   * @returns this (for chaining)
-   *
-   * Type inference:
-   *  - Path string literal - ParamsObject<Path>
-   *  - Handler receives Context<E, ParamsObject<Path>>
+   * Compiles the Staging Arrays into the RadixTree.
+   * This runs ONCE at startup.
    */
+  compile() {
+    if (this.#isCompiled) return;
 
-  get<Path extends string>(
-    path: Path,
-    handler: Handler<E, ParamsObject<Path>>,
-  ): this {
-    this.#tree.insert("GET", path, handler as any);
-    return this;
-  }
+    console.log(`🌸 Tomoe: Compiling ${this.#routes.length} routes...`);
 
-  post<Path extends string>(
-    path: Path,
-    handler: Handler<E, ParamsObject<Path>>,
-  ): this {
-    this.#tree.insert("POST", path, handler as any);
-    return this;
-  }
+    for (const route of this.#routes) {
+      const stack = this.#findStack(route.path);
 
-  put<Path extends string>(
-    path: Path,
-    handler: Handler<E, ParamsObject<Path>>,
-  ): this {
-    this.#tree.insert("PUT", path, handler as any);
-    return this;
-  }
+      if (stack.length === 0) {
+        this.#tree.insert(route.method, route.path, route.handler as any);
+        continue;
+      }
 
-  patch<Path extends string>(
-    path: Path,
-    handler: Handler<E, ParamsObject<Path>>,
-  ): this {
-    this.#tree.insert("PATCH", path, handler as any);
-    return this;
-  }
+      const signature = stack.map(getMwId).join("|");
 
-  delete<Path extends string>(
-    path: Path,
-    handler: Handler<E, ParamsObject<Path>>,
-  ): this {
-    this.#tree.insert("DELETE", path, handler as any);
-    return this;
+      let runner = this.#chainCache.get(signature);
+
+      if (!runner) {
+        runner = this.#createRunner(stack);
+        this.#chainCache.set(signature, runner);
+      }
+
+      const optimizedHandler = (c: Context) => {
+        return runner(c, route.handler);
+      };
+
+      this.#tree.insert(route.method, route.path, optimizedHandler);
+    }
+
+    this.#isCompiled = true;
   }
 
   /**
-   * Register middleware
-   *
-   * Middleware runs before route handlers in registration order.
-   * Can add properties to context via c.set()
-   *
-   * @param middleware - Middleware function
-   * @returns Router with updated environment type
+   * The Entry Point.
+   * Accessing 'app.fetch' automatically triggers compilation.
    */
-
-  use<NewEnv extends Env>(
-    middleware: Middleware<E, NewEnv>,
-  ): Router<E & NewEnv> {
-    this.#middleware.push(middleware as any);
-    return this as any;
+  get fetch() {
+    if (!this.#isCompiled) {
+      this.compile();
+    }
+    return this.#dispatch.bind(this);
   }
 
   /**
-   * Handle incoming request
-   *
-   * This is the main entry point for request processing.
-   * Called by runtime adapters (Node.js, Bun, Deno, CF Workers, etc.)
-   *
-   * @param request - Native Web Request
-   * @param executionCtx - Execution context (CF)
-   * @returns Native Web Response
+   * The actual runtime dispatcher.
    */
-
-  async fetch(request: Request, executionCtx?: any): Promise<Response> {
+  async #dispatch(request: Request, env?: any, ctx?: any): Promise<Response> {
     const url = new URL(request.url);
-    const path = url.pathname;
-    const method = request.method.toUpperCase();
 
-    const match = this.#tree.match(method as HTTPMethod, path);
+    // 1. Radix Tree Lookup (Fast)
+    const match = this.#tree.match(request.method, url.pathname);
 
     if (!match) {
       return new Response("Not Found", { status: 404 });
     }
 
-    const { handler, params } = match;
-
-    const context = new Context(request, params, this.#env, executionCtx);
-
-    let index = 0;
-
-    const next = async (): Promise<Response> => {
-      if (index >= this.#middleware.length) {
-        return await handler(context as any);
-      }
-
-      const middleware = this.#middleware[index++];
-
-      // @ts-ignore
-      return await middleware(context as any, next);
-    };
+    const context = new Context(request, match.params, env || this.#env);
 
     try {
-      return await next();
-    } catch (error) {
-      console.error("Handle error:", error);
-
+      return match.handler(context);
+    } catch (err) {
+      console.error(err);
       return new Response(
         JSON.stringify({
           error: "Internal Server Error",
-          message: error instanceof Error ? error.message : String(error),
+          message: err instanceof Error ? err.message : String(err),
         }),
-
         {
           status: 500,
-          headers: { "Content-Type": "application/json" },
         },
       );
     }
   }
 
   /**
-   * Get all registered routes (for debugging)
-   *
-   * @returns Array of route info
+   * Helper: Filters middleware array for a given path
    */
-  getRoutes(): Array<{ method: string; path: string }> {
-    return this.#tree.getRoutes();
+  #findStack(routePath: string): Middleware[] {
+    return this.#middlewares
+      .filter((m) => {
+        if (m.path === "*" || m.path === "/*") return true;
+        const prefix = m.path.replace(/\*$/, "");
+        return (
+          routePath === prefix ||
+          routePath.startsWith(prefix.endsWith("/") ? prefix : `${prefix}/`)
+        );
+      })
+      .map((m) => m.handler);
   }
 
   /**
-   * Get router statistics (for profiling)
-   *
-   * @returns Router stats
+   * Helper: Factory that creates the "Shared Chain" runner
    */
+  #createRunner(stack: Middleware[]) {
+    return (ctx: Context, finalHandler: Handler) => {
+      let index = -1;
+
+      const dispatch = (i: number): any => {
+        if (i <= index) throw new Error("next() called multiple times");
+        index = i;
+
+        // End of stack? Run the user's route handler
+        if (i === stack.length) {
+          return finalHandler(ctx);
+        }
+
+        const mw = stack[i];
+        if (!mw) {
+          throw new Error(`Middleware at index ${i} is undefined`);
+        }
+        return mw(ctx, () => dispatch(i + 1));
+      };
+
+      return dispatch(0);
+    };
+  }
+
+  // Debugging tools
+  getRoutes() {
+    return this.#tree.getRoutes();
+  }
   getStats() {
     return this.#tree.getStats();
   }

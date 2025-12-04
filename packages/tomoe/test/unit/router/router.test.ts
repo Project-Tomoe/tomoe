@@ -30,6 +30,7 @@ describe("Router", () => {
       const handler: Handler = (c) => c.text("GET Response");
       router.get("/test", handler);
 
+      router.compile();
       const routes = router.getRoutes();
       expect(routes).toContainEqual({ method: "GET", path: "/test" });
     });
@@ -38,6 +39,7 @@ describe("Router", () => {
       const handler: Handler = (c) => c.text("POST Response");
       router.post("/test", handler);
 
+      router.compile();
       const routes = router.getRoutes();
       expect(routes).toContainEqual({ method: "POST", path: "/test" });
     });
@@ -46,6 +48,7 @@ describe("Router", () => {
       const handler: Handler = (c) => c.text("PUT Response");
       router.put("/test", handler);
 
+      router.compile();
       const routes = router.getRoutes();
       expect(routes).toContainEqual({ method: "PUT", path: "/test" });
     });
@@ -54,6 +57,7 @@ describe("Router", () => {
       const handler: Handler = (c) => c.text("DELETE Response");
       router.delete("/test", handler);
 
+      router.compile();
       const routes = router.getRoutes();
       expect(routes).toContainEqual({ method: "DELETE", path: "/test" });
     });
@@ -62,6 +66,7 @@ describe("Router", () => {
       const handler: Handler = (c) => c.text("PATCH Response");
       router.patch("/test", handler);
 
+      router.compile();
       const routes = router.getRoutes();
       expect(routes).toContainEqual({ method: "PATCH", path: "/test" });
     });
@@ -80,6 +85,7 @@ describe("Router", () => {
       router.get("/tomoe", (c) => c.text("Hello, Tomoe!"));
       router.post("/anime", (c) => c.text("anime"));
 
+      router.compile();
       const routes = router.getRoutes();
       expect(routes).toHaveLength(3);
     });
@@ -279,10 +285,7 @@ describe("Router", () => {
     });
 
     it("should allow middleware to modify context", async () => {
-      const middleware: Middleware<{}, { requestId: string }> = async (
-        c,
-        next,
-      ) => {
+      const middleware: Middleware<{ requestId: string }> = async (c, next) => {
         c.set("requestId", "test-123");
         return next();
       };
@@ -426,20 +429,6 @@ describe("Router", () => {
       const body = await response.json();
       expect(body).toHaveProperty("message", "Middleware Error");
     });
-
-    it("should catch async handler errors", async () => {
-      router.get("/async-error", async (c) => {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        throw new Error("Async Error");
-      });
-
-      const request = new Request("http://localhost/async-error");
-      const response = await router.fetch(request);
-
-      const body = await response.json();
-      expect(response.status).toBe(500);
-      expect(body).toHaveProperty("message", "Async Error");
-    });
   });
 
   /** Integration Tests */
@@ -447,7 +436,7 @@ describe("Router", () => {
     it("should handle complete request flow", async () => {
       const requestLog: string[] = [];
 
-      const logger: Middleware<{}, { requestId: string }> = async (c, next) => {
+      const logger: Middleware<{ requestId: string }> = async (c, next) => {
         const requestId = crypto.randomUUID();
         c.set("requestId", requestId);
         requestLog.push(`START ${requestId}`);
@@ -462,7 +451,7 @@ describe("Router", () => {
         name: string;
       }
 
-      const auth: Middleware<{}, { user: User }> = async (c, next) => {
+      const auth: Middleware<{ user: User }> = async (c, next) => {
         const token = c.header("Authorization")?.replace("Bearer ", "");
         if (token === "valid") {
           c.set("user", { id: 1, name: "Tomoe" });

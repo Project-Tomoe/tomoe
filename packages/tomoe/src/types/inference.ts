@@ -5,7 +5,7 @@
  * Enabling full type safety without manual type annotation (at compile time)
  */
 
-import { Prettify } from "./utils";
+import type { Prettify } from "./utils";
 
 /**
  * ExtractPathParam - Extract a single paramter name from path segment

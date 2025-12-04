@@ -2,13 +2,10 @@
  * Tomoe - Main class
  */
 
+import type { Env } from "./context";
 import { Router } from "./router/router";
 
-export class Tomoe<E extends Record<string, any> = {}> extends Router<E> {
-  constructor(env?: E) {
-    super(env);
-  }
-}
+export class Tomoe<E extends Env = Env> extends Router<E> {}
 
 export { Router };
 

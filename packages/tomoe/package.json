@@ -1,6 +1,6 @@
 {
   "name": "tomoe",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "Tomoe — The art of perfect balance",
   "author": "Nanasi",
   "license": "MIT",
@@ -19,8 +19,7 @@
   },
   "files": [
     "dist",
-    "README.md",
-    "LICENSE"
+    "README.md"
   ],
   "scripts": {
     "build": "tsc --project tsconfig.build.json",
