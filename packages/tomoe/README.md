@@ -1,8 +1,7 @@
 <p align="center">
-  <img src="https://i.postimg.cc/SR7yvcj9/226421950.png" width="180" alt="Tomoe Logo"/>
+  <img src="https://i.ibb.co/TxJjb0Y5/226421950.png" width="300" alt="Tomoe Logo"/>
 </p>
 
-<h1 align="center">Tomoe</h1>
 <p align="center"><strong>The art of perfect balance</strong></p>
 
 ---
