@@ -21,12 +21,12 @@ Tomoe focuses on delivering a smooth development experience while keeping the in
 ## 📦 Installation (Bun)
 
 ```bash
-bun add tomoe
-
+bun init project-name
+bun add tomoejs
 ```
 
 ```typescript
-import { Tomoe } from "tomoe";
+import { Tomoe } from "tomoejs";
 
 const app = new Tomoe();
 
@@ -98,12 +98,22 @@ app.get("/tomoe", (c) => {
   });
 });
 
-const PORT = 3000;
 
+// This created optimized runner for different routes and add it to radix tree. (Here happens the magic of optimization)
+
+// Note: If you don't run app.compile(), it will auto compile once after receiving first request.
 app.compile();
 
+
+// This runs tomoe app on port 3000
+export default app;
+```
+
+## Different Port
+```typescript 
+//if you want to run on different port
 export default {
-  port: 3000,
+  port: 4000,
   fetch: (req: Request) => app.fetch(req),
 };
 ```
