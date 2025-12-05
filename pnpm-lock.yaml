@@ -26,7 +26,7 @@ importers:
 
   apps/examples:
     dependencies:
-      tomoe:
+      tomoejs:
         specifier: workspace:^
         version: link:../../packages/tomoe
 
@@ -47,7 +47,7 @@ importers:
 
   runtimes/bun:
     dependencies:
-      tomoe:
+      tomoejs:
         specifier: workspace:*
         version: link:../../packages/tomoe
     devDependencies:
