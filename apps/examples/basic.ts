@@ -1,4 +1,4 @@
-import { Tomoe } from "tomoe";
+import { Tomoe } from "tomoejs";
 
 const app = new Tomoe();
 
