@@ -5,13 +5,13 @@
  *
  * @example
  * ```
- * import {Tomoe} from 'tomoe'
+ * import {Tomoe} from 'tomoejs'
  *
  * const app = new Tomoe()
  *
  * app.get('/', (c) => c.text("Moonlit Fantasy"))
  *
- * export default app // for cloudflare workers
+ * export default app;
  *
  * ````
  */
@@ -43,4 +43,4 @@ export type {
 } from "./types/inference";
 
 // Package version (for debugging)
-export const VERSION = "0.1.0";
+export const VERSION = "0.0.2";
