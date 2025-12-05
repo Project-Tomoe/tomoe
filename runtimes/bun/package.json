@@ -23,7 +23,7 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "tomoe": "workspace:*"
+    "tomoejs": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "^1.1.10",
