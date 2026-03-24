@@ -8,9 +8,10 @@ import type { RelicGroup } from "../relic/unite"
 import type { AnyRelic } from "../relic/relic"
 import { executeRelics, validateRelicChain } from "../relic/executor"
 import { HttpError } from "../relic/error"
+import { unite } from "../relic/unite"
 import { RadixTree } from "./radix"
 
-//Handler & Middleware types
+// Handler & Middleware types 
 
 export type Handler<
   E extends Env = Env,
@@ -25,7 +26,31 @@ export type Middleware<E extends Env = any> = (
 
 export type HTTPMethod = "GET" | "POST" | "PUT" | "DELETE" | "PATCH"
 
-// Middleware identity (for chain caching)
+// Relic input type
+
+/**
+ * Anything accepted as a relic argument:
+ *   - Single relic       → app.get('/me', authRelic, handler)
+ *   - Group from unite() → app.get('/me', unite(authRelic, orgRelic), handler)
+ */
+type RelicInput<Ctx extends Record<string, any> = any> =
+  | AnyRelic
+  | RelicGroup<AnyRelic[], Ctx>
+
+/**
+ * Normalize a RelicInput into a RelicGroup.
+ * Single relic → wrapped in unite() internally — transparent to the user.
+ */
+function normalizeRelics<Ctx extends Record<string, any>>(
+  input: RelicInput<Ctx>
+): RelicGroup<AnyRelic[], Ctx> {
+  if ("_kind" in input && input._kind === "group") {
+    return input as RelicGroup<AnyRelic[], Ctx>
+  }
+  return unite(input as AnyRelic) as RelicGroup<AnyRelic[], Ctx>
+}
+
+// Middleware identity (for chain caching) 
 
 type AnyMiddleware = Middleware<any>
 
@@ -41,14 +66,35 @@ const getMwId = (fn: Middleware): string => {
   return id
 }
 
+// Shared relic-wrapped handler builder
+
+/**
+ * Wraps a handler with relic execution.
+ * Single source of truth — used by both app.get/post/... and ScopedRouter.
+ */
+function wrapWithRelics<P extends Record<string, string>, R extends Record<string, any>>(
+  relics: AnyRelic[],
+  handler: Handler<any, P, R>,
+  errorHandlers: Map<number, (ctx: Context<any, any, R>) => Response | Promise<Response>>,
+): Handler<any, P, R> {
+  return async (ctx) => {
+    const relicError = await executeRelics(relics, ctx)
+
+    if (relicError) {
+      const customHandler = errorHandlers.get(relicError.status)
+      if (customHandler) return customHandler(ctx)
+      return relicError.toResponse()
+    }
+
+    return handler(ctx)
+  }
+}
+
 // ScopedRouter
 
 /**
  * A router scoped to a path prefix and relic group.
  * Returned to the builder callback in app.scope().
- *
- * All routes registered here automatically run the scope's relics
- * before the handler executes.
  */
 export class ScopedRouter<R extends Record<string, any> = {}> {
   #prefix: string
@@ -69,48 +115,29 @@ export class ScopedRouter<R extends Record<string, any> = {}> {
       : this.#prefix
   }
 
-  /**
-   * Register GET route inside this scope.
-   */
-  get<Path extends string>(
-    path: Path,
-    handler: Handler<any, ParamsObject<Path>, R>,
-  ): this {
+  get<Path extends string>(path: Path, handler: Handler<any, ParamsObject<Path>, R>): this {
     return this.#register("GET", path, handler)
   }
 
-  post<Path extends string>(
-    path: Path,
-    handler: Handler<any, ParamsObject<Path>, R>,
-  ): this {
+  post<Path extends string>(path: Path, handler: Handler<any, ParamsObject<Path>, R>): this {
     return this.#register("POST", path, handler)
   }
 
-  put<Path extends string>(
-    path: Path,
-    handler: Handler<any, ParamsObject<Path>, R>,
-  ): this {
+  put<Path extends string>(path: Path, handler: Handler<any, ParamsObject<Path>, R>): this {
     return this.#register("PUT", path, handler)
   }
 
-  delete<Path extends string>(
-    path: Path,
-    handler: Handler<any, ParamsObject<Path>, R>,
-  ): this {
+  delete<Path extends string>(path: Path, handler: Handler<any, ParamsObject<Path>, R>): this {
     return this.#register("DELETE", path, handler)
   }
 
-  patch<Path extends string>(
-    path: Path,
-    handler: Handler<any, ParamsObject<Path>, R>,
-  ): this {
+  patch<Path extends string>(path: Path, handler: Handler<any, ParamsObject<Path>, R>): this {
     return this.#register("PATCH", path, handler)
   }
 
   /**
    * Register a custom error handler for a specific HTTP status.
-   * Only needed when you want non-default behavior
-   * (e.g. redirect to /login instead of returning 401 JSON).
+   * Only needed when you want non-default behavior.
    *
    * @example
    * r.onError(401, (ctx) => ctx.redirect('/login'))
@@ -129,27 +156,8 @@ export class ScopedRouter<R extends Record<string, any> = {}> {
     handler: Handler<any, ParamsObject<Path>, R>,
   ): this {
     const fullPath = `${this.#normalizedPrefix}${path === "/" ? "" : path}`
-    const relics = this.#relics
-    const errorHandlers = this.#errorHandlers
-
-    // Wrap handler with relic execution
-    const relicHandler: Handler<any, any, any> = async (ctx) => {
-      const relicError = await executeRelics(relics, ctx)
-
-      if (relicError) {
-        // Check for custom error handler first
-        const customHandler = errorHandlers.get(relicError.status)
-        if (customHandler) {
-          return customHandler(ctx)
-        }
-        // Default: automatic response from error definition
-        return relicError.toResponse()
-      }
-
-      return handler(ctx as Context<any, ParamsObject<Path>, R>)
-    }
-
-    this.#parent._registerRoute(method, fullPath, relicHandler as any)
+    const wrapped = wrapWithRelics(this.#relics, handler, this.#errorHandlers)
+    this.#parent._registerRoute(method, fullPath, wrapped as any)
     return this
   }
 }
@@ -157,34 +165,18 @@ export class ScopedRouter<R extends Record<string, any> = {}> {
 // Router
 
 export class Router<E extends Env = Env> {
-  /** The radix tree holds final optimized handler functions */
   #tree: RadixTree
-
-  /** Staging: raw middlewares before compile */
   #middlewares: Array<{ path: string; handler: Middleware }>
-
-  /** Staging: raw routes before compile */
   #routes: Array<{ method: HTTPMethod; path: string; handler: Handler }>
-
-  /** Cache: shared middleware chains by signature */
   #chainCache: Map<string, (c: Context, final: Handler) => any>
-
-  /** Compilation flag */
   #isCompiled = false
-
   #env: E
 
-  /**
-   * Global error handler — override for custom 500 behavior.
-   * Default: returns generic 500 (does NOT leak error details).
-   */
+  /** Global error handler — safe 500 by default, no details leaked */
   #errorHandler: (err: unknown, ctx?: Context) => Response = () =>
     new Response(
       JSON.stringify({ error: "Internal Server Error" }),
-      {
-        status: 500,
-        headers: { "Content-Type": "application/json; charset=utf-8" },
-      }
+      { status: 500, headers: { "Content-Type": "application/json; charset=utf-8" } }
     )
 
   constructor(env: E = {} as E) {
@@ -195,49 +187,139 @@ export class Router<E extends Env = Env> {
     this.#env = env
   }
 
-  // HTTP method registration
+  // HTTP methods
+  //
+  // Each method supports two call signatures:
+  //
+  //   app.get('/path', handler)
+  //   app.get('/path', relicOrGroup, handler)
+  //
+  // The second form runs relics before the handler.
+  // A single relic does NOT need unite() — pass it directly.
 
   get<Path extends string>(
     path: Path,
     handler: Handler<E, ParamsObject<Path>>,
+  ): this
+  get<Path extends string, Ctx extends Record<string, any>>(
+    path: Path,
+    relics: RelicInput<Ctx>,
+    handler: Handler<E, ParamsObject<Path>, Ctx>,
+  ): this
+  get<Path extends string, Ctx extends Record<string, any>>(
+    path: Path,
+    relicsOrHandler: RelicInput<Ctx> | Handler<E, ParamsObject<Path>>,
+    handler?: Handler<E, ParamsObject<Path>, Ctx>,
   ): this {
-    this.#routes.push({ method: "GET", path, handler: handler as any })
-    return this
+    return this.#method("GET", path, relicsOrHandler, handler)
   }
 
   post<Path extends string>(
     path: Path,
     handler: Handler<E, ParamsObject<Path>>,
+  ): this
+  post<Path extends string, Ctx extends Record<string, any>>(
+    path: Path,
+    relics: RelicInput<Ctx>,
+    handler: Handler<E, ParamsObject<Path>, Ctx>,
+  ): this
+  post<Path extends string, Ctx extends Record<string, any>>(
+    path: Path,
+    relicsOrHandler: RelicInput<Ctx> | Handler<E, ParamsObject<Path>>,
+    handler?: Handler<E, ParamsObject<Path>, Ctx>,
   ): this {
-    this.#routes.push({ method: "POST", path, handler: handler as any })
-    return this
+    return this.#method("POST", path, relicsOrHandler, handler)
   }
 
   put<Path extends string>(
     path: Path,
     handler: Handler<E, ParamsObject<Path>>,
+  ): this
+  put<Path extends string, Ctx extends Record<string, any>>(
+    path: Path,
+    relics: RelicInput<Ctx>,
+    handler: Handler<E, ParamsObject<Path>, Ctx>,
+  ): this
+  put<Path extends string, Ctx extends Record<string, any>>(
+    path: Path,
+    relicsOrHandler: RelicInput<Ctx> | Handler<E, ParamsObject<Path>>,
+    handler?: Handler<E, ParamsObject<Path>, Ctx>,
   ): this {
-    this.#routes.push({ method: "PUT", path, handler: handler as any })
-    return this
+    return this.#method("PUT", path, relicsOrHandler, handler)
   }
 
   delete<Path extends string>(
     path: Path,
     handler: Handler<E, ParamsObject<Path>>,
+  ): this
+  delete<Path extends string, Ctx extends Record<string, any>>(
+    path: Path,
+    relics: RelicInput<Ctx>,
+    handler: Handler<E, ParamsObject<Path>, Ctx>,
+  ): this
+  delete<Path extends string, Ctx extends Record<string, any>>(
+    path: Path,
+    relicsOrHandler: RelicInput<Ctx> | Handler<E, ParamsObject<Path>>,
+    handler?: Handler<E, ParamsObject<Path>, Ctx>,
   ): this {
-    this.#routes.push({ method: "DELETE", path, handler: handler as any })
-    return this
+    return this.#method("DELETE", path, relicsOrHandler, handler)
   }
 
   patch<Path extends string>(
     path: Path,
     handler: Handler<E, ParamsObject<Path>>,
+  ): this
+  patch<Path extends string, Ctx extends Record<string, any>>(
+    path: Path,
+    relics: RelicInput<Ctx>,
+    handler: Handler<E, ParamsObject<Path>, Ctx>,
+  ): this
+  patch<Path extends string, Ctx extends Record<string, any>>(
+    path: Path,
+    relicsOrHandler: RelicInput<Ctx> | Handler<E, ParamsObject<Path>>,
+    handler?: Handler<E, ParamsObject<Path>, Ctx>,
   ): this {
-    this.#routes.push({ method: "PATCH", path, handler: handler as any })
+    return this.#method("PATCH", path, relicsOrHandler, handler)
+  }
+
+  /**
+   * Shared implementation for all HTTP method registrations.
+   * Detects whether relics were passed and wraps handler accordingly.
+   */
+  #method<Path extends string, Ctx extends Record<string, any>>(
+    method: HTTPMethod,
+    path: Path,
+    relicsOrHandler: RelicInput<Ctx> | Handler<E, ParamsObject<Path>>,
+    handler?: Handler<E, ParamsObject<Path>, Ctx>,
+  ): this {
+    // Plain handler — no relics
+    if (typeof relicsOrHandler === "function") {
+      this.#routes.push({ method, path, handler: relicsOrHandler as any })
+      return this
+    }
+
+    // Relics provided — normalize, validate, wrap
+    if (!handler) {
+      throw new Error(
+        `app.${method.toLowerCase()}('${path}'): handler is required when relics are provided.`
+      )
+    }
+
+    const group = normalizeRelics(relicsOrHandler)
+
+    const errors = validateRelicChain(group.relics, path)
+    if (errors.length > 0) {
+      throw new Error(`TomoeJS: Invalid relic configuration:\n${errors.join("\n")}`)
+    }
+
+    // Inline routes have no scope-level onError — use empty map (default behavior)
+    const emptyErrorHandlers = new Map<number, (ctx: Context<any, any, Ctx>) => Response>()
+    const wrapped = wrapWithRelics(group.relics, handler, emptyErrorHandlers)
+    this.#routes.push({ method, path, handler: wrapped as any })
     return this
   }
 
-  // Middleware 
+  // Middleware
 
   use(handler: Middleware<E>): this
   use(path: string, handler: Middleware<E>): this
@@ -247,9 +329,7 @@ export class Router<E extends Env = Env> {
 
     if (typeof arg1 === "string") {
       path = arg1
-      if (!arg2) {
-        throw new Error("Middleware must be provided when a path is specified.")
-      }
+      if (!arg2) throw new Error("Middleware must be provided when a path is specified.")
       handler = arg2
     } else {
       handler = arg1
@@ -259,34 +339,35 @@ export class Router<E extends Env = Env> {
     return this
   }
 
-  // Scope 
+  // Scope
 
   /**
-   * Create a scoped route group with a relic group.
+   * Create a scoped route group protected by relics.
    *
-   * All routes inside the scope:
-   *  - Are prefixed with `path`
-   *  - Run the relic chain before the handler
-   *  - Have access to typed relic context via ctx.relic(Token)
+   * Accepts a single relic OR a unite() group — no wrapping needed
+   * for single relics:
    *
    * @example
-   * const userAccess = unite(authRelic)
-   *
-   * app.scope('/user', userAccess, (r) => {
+   * // Single relic — pass directly
+   * app.scope('/user', authRelic, (r) => {
    *   r.get('/me', (ctx) => ctx.json(ctx.relic(UserCtx)))
    * })
+   *
+   * // Multiple relics — use unite()
+   * app.scope('/admin', unite(authRelic, orgRelic), (r) => {
+   *   r.get('/dashboard', (ctx) => ctx.json({ ... }))
+   * })
    */
-  scope<Relics extends AnyRelic[], Ctx extends Record<string, any>>(
+  scope<Ctx extends Record<string, any>>(
     path: string,
-    group: RelicGroup<Relics, Ctx>,
+    input: RelicInput<Ctx>,
     builder: (r: ScopedRouter<Ctx>) => void,
   ): this {
-    // Validate relic chain at scope definition time
-    const validationErrors = validateRelicChain(group.relics, path)
-    if (validationErrors.length > 0) {
-      throw new Error(
-        `TomoeJS: Invalid relic configuration:\n${validationErrors.join("\n")}`
-      )
+    const group = normalizeRelics(input)
+
+    const errors = validateRelicChain(group.relics, path)
+    if (errors.length > 0) {
+      throw new Error(`TomoeJS: Invalid relic configuration:\n${errors.join("\n")}`)
     }
 
     const scopedRouter = new ScopedRouter<Ctx>(path, group.relics, this)
@@ -294,13 +375,10 @@ export class Router<E extends Env = Env> {
     return this
   }
 
-  // Error handler
+  // Global error handler
 
   /**
-   * Set a global error handler for unhandled exceptions.
-   *
-   * Default: returns { error: "Internal Server Error" } with 500.
-   * In development, you can expose details:
+   * Override the global error handler for uncaught exceptions.
    *
    * @example
    * app.onError((err, ctx) => {
@@ -314,18 +392,14 @@ export class Router<E extends Env = Env> {
     return this
   }
 
-  // Internal: route registration from ScopedRouter 
+  // Internal
 
   _registerRoute(method: HTTPMethod, path: string, handler: Handler): void {
     this.#routes.push({ method, path, handler })
   }
 
-  // Compile 
+  // Compile
 
-  /**
-   * Compile staging arrays into the radix tree.
-   * Runs once at startup — subsequent calls are no-ops.
-   */
   compile(): void {
     if (this.#isCompiled) return
 
@@ -354,17 +428,14 @@ export class Router<E extends Env = Env> {
     this.#isCompiled = true
   }
 
-  //  Fetch (entry point) 
+  //  Fetch
 
-  /**
-   * The fetch handler. Accessing this triggers compilation if needed.
-   */
   get fetch() {
     if (!this.#isCompiled) this.compile()
     return this.#dispatch.bind(this)
   }
 
-  async #dispatch(request: Request, env?: any, ctx?: any): Promise<Response> {
+  async #dispatch(request: Request, env?: any): Promise<Response> {
     const url = new URL(request.url)
     const match = this.#tree.match(request.method, url.pathname)
 
@@ -377,10 +448,7 @@ export class Router<E extends Env = Env> {
     try {
       return await match.handler(context)
     } catch (err) {
-      // HttpErrors thrown directly (not via err()) are handled here
-      if (err instanceof HttpError) {
-        return err.toResponse()
-      }
+      if (err instanceof HttpError) return err.toResponse()
       console.error(err)
       return this.#errorHandler(err, context)
     }
@@ -408,11 +476,7 @@ export class Router<E extends Env = Env> {
       const dispatch = (i: number): any => {
         if (i <= index) throw new Error("next() called multiple times")
         index = i
-
-        if (i === stack.length) {
-          return finalHandler(ctx)
-        }
-
+        if (i === stack.length) return finalHandler(ctx)
         const mw = stack[i]
         if (!mw) throw new Error(`Middleware at index ${i} is undefined`)
         return mw(ctx, () => dispatch(i + 1))
@@ -422,13 +486,8 @@ export class Router<E extends Env = Env> {
     }
   }
 
-  // Debug helpers
+  // Debug
 
-  getRoutes() {
-    return this.#tree.getRoutes()
-  }
-
-  getStats() {
-    return this.#tree.getStats()
-  }
+  getRoutes() { return this.#tree.getRoutes() }
+  getStats()  { return this.#tree.getStats() }
 }
