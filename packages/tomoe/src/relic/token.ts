@@ -15,7 +15,7 @@
  */
 
 // Prevents Token<string> from being assignable to Token<number>
-const TokenBrand = Symbol("TokenBrand");
+const TokenBrand = Symbol.for("tomoe.token");
 
 export interface Token<T> {
     readonly [TokenBrand]: T 
