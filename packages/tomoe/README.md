@@ -186,7 +186,7 @@ Relics are Tomoe's answer to a real problem: middleware can't guarantee that wha
 Relics solve this with **explicit typed contracts**:
 - A relic declares what it **provides** (a typed token)
 - The framework validates the chain **at startup**
-- Handlers only receive what their scope's relics guarantee
+- Handlers only receive what their relics guarantee
 
 ### Tokens
 
@@ -401,7 +401,6 @@ const adminGuard = relic(async (ctx, use) => {
 })
 
 // ── Access policies ──────────────────────────────────────────────
-const userAccess  = unite(authRelic)
 const adminAccess = unite(authRelic, orgRelic, adminGuard)
 
 // ── App ──────────────────────────────────────────────────────────
@@ -418,17 +417,8 @@ app.get("/health", (c) => c.text("ok"))
 app.get("/", (c) => c.html("<h1>Welcome</h1>"))
 
 // User routes — requires auth
-app.scope("/user", userAccess, (r) => {
-  r.get("/me", (ctx) => {
+app.get("/me", authRelic, (ctx) => {
     return ctx.json(ctx.relic(UserCtx))
-  })
-
-  r.post("/settings", async (ctx) => {
-    const user = ctx.relic(UserCtx)
-    const body = await ctx.req.json()
-    await db.users.update(user.id, body)
-    return ctx.json({ updated: true })
-  })
 })
 
 // Admin routes — requires auth + org + admin flag
@@ -442,7 +432,7 @@ app.scope("/admin", adminAccess, (r) => {
 })
 
 // Web routes — same auth, different error behavior
-app.scope("/web", userAccess, (r) => {
+app.scope("/web", authRelic, (r) => {
   r.onError(401, (ctx) => ctx.redirect("/login"))
   r.get("/home", (ctx) => {
     const user = ctx.relic(UserCtx)
