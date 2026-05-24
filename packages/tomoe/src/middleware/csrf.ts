@@ -19,18 +19,27 @@ export function csrf(options: CsrfOptions = {}): Middleware {
 
     const origin = c.header("Origin");
     const referer = c.header("Referer");
-    const host = c.header("Host") || new URL(c.req.url).host;
 
-    let targetOrigin = origin;
-    if (!targetOrigin && referer) {
+    // X-Forwarded-Host support for reverse proxies (like Cloudflare, ALB, Nginx)
+    const forwardedHost = c.header("X-Forwarded-Host")?.split(",")[0]?.trim();
+    const host = forwardedHost || c.header("Host") || new URL(c.req.url).host;
+
+    let targetHost = "";
+    if (origin) {
       try {
-        targetOrigin = new URL(referer).host;
-      } catch (e) {
-        // Fallback if referer parsing fails
+        targetHost = new URL(origin).hostname;
+      } catch {
+        targetHost = origin.replace(/^https?:\/\//i, "").split(":")[0] || "";
+      }
+    } else if (referer) {
+      try {
+        targetHost = new URL(referer).hostname;
+      } catch {
+        targetHost = referer.replace(/^https?:\/\//i, "").split(":")[0] || "";
       }
     }
 
-    if (!targetOrigin) {
+    if (!targetHost) {
       return new Response(
         JSON.stringify({ error: "Forbidden: CSRF check failed (Missing Origin/Referer)" }),
         {
@@ -44,18 +53,29 @@ export function csrf(options: CsrfOptions = {}): Middleware {
     if (options.origin) {
       const allowedOrigins = Array.isArray(options.origin) ? options.origin : [options.origin];
       allowed = allowedOrigins.some((o) => {
+        if (o === "*") return true;
+        let allowedHost = "";
         try {
-          return new URL(o).host === targetOrigin || o === targetOrigin;
+          if (/^https?:\/\//i.test(o)) {
+            allowedHost = new URL(o).hostname;
+          } else {
+            allowedHost = new URL(`http://${o}`).hostname;
+          }
         } catch {
-          return o === targetOrigin;
+          allowedHost = o.replace(/^https?:\/\//i, "").split(":")[0] || "";
         }
+        return allowedHost === targetHost;
       });
     } else {
       // Default: verify host
       try {
-        const hostName = host.split(":")[0];
-        const originName = targetOrigin.replace(/^https?:\/\//, "").split(":")[0];
-        allowed = hostName === originName;
+        let hostName = "";
+        if (/^https?:\/\//i.test(host)) {
+          hostName = new URL(host).hostname;
+        } else {
+          hostName = new URL(`http://${host}`).hostname;
+        }
+        allowed = hostName === targetHost;
       } catch {
         allowed = false;
       }
