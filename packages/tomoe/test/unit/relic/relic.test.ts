@@ -194,6 +194,34 @@ describe("executeRelics()", () => {
     const result = await executeRelics([check], ctx);
     expect(result?.status).toBe(403);
   });
+
+  it("should prevent duplicate execution of already-run relics", async () => {
+    let provideCount = 0;
+    let guardCount = 0;
+
+    const countRelic = relic("count", async () => {
+      provideCount++;
+      return { val: provideCount };
+    });
+
+    const countGuard = guard(async () => {
+      guardCount++;
+    });
+
+    const ctx = makeCtx();
+
+    // First execution
+    const r1 = await executeRelics([countRelic, countGuard], ctx);
+    expect(r1).toBeNull();
+    expect(provideCount).toBe(1);
+    expect(guardCount).toBe(1);
+
+    // Second execution on same context with duplicate references
+    const r2 = await executeRelics([countRelic, countGuard], ctx);
+    expect(r2).toBeNull();
+    expect(provideCount).toBe(1); // Should still be 1 (cached!)
+    expect(guardCount).toBe(1);    // Should still be 1 (cached!)
+  });
 });
 
 // ctx.relic() and Proxy direct properties

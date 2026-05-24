@@ -27,6 +27,12 @@ export async function executeRelics(
   ctx: ExecutorCtx
 ): Promise<HttpError | null> {
   for (const rel of relics) {
+    // If this relic has already run successfully on this request context, skip it
+    const cached = ctx._getRelic(rel._id);
+    if (cached !== undefined) {
+      continue;
+    }
+
     // Build the use() resolver for this relic
     const use = <T>(targetRelic: ProvidingRelic<any, T>): T => {
       const value = ctx._getRelic(targetRelic._id);
@@ -45,11 +51,12 @@ export async function executeRelics(
     try {
       const result = await rel.fn(ctx as any, use);
 
-      // Guard relics return void on success — nothing to store
+      // Guard relics return void on success — cache success flag to prevent double execution
       if (rel._kind === "guard") {
         if (isErr(result)) {
           return result.error;
         }
+        ctx._setRelic(rel._id, true);
         continue;
       }
 
