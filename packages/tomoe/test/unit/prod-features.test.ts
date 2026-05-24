@@ -35,6 +35,16 @@ describe("Cookies, CSRF, Rate Limiting, and Swagger Customization", () => {
       const setCookie = res.headers.get("Set-Cookie");
       expect(setCookie).toBe("response_cookie=hello; HttpOnly; Secure");
     });
+
+    it("should return 500 status on invalid cookie names in setCookie", async () => {
+      app.get("/invalid-cookie", (c) => {
+        c.setCookie("bad=cookie;name", "value");
+        return c.text("ok");
+      });
+
+      const res = await app.fetch(new Request("http://localhost/invalid-cookie"));
+      expect(res.status).toBe(500);
+    });
   });
 
   describe("CSRF Protection Middleware", () => {
@@ -110,6 +120,40 @@ describe("Cookies, CSRF, Rate Limiting, and Swagger Customization", () => {
       expect(res.status).toBe(200);
       expect(await res.text()).toBe("ok");
     });
+
+    it("should allow POST requests with matching X-Forwarded-Host", async () => {
+      app.use(csrf());
+      app.post("/unsafe", (c) => c.text("ok"));
+
+      const res = await app.fetch(
+        new Request("http://localhost/unsafe", {
+          method: "POST",
+          headers: {
+            "Origin": "http://my-domain.com",
+            "X-Forwarded-Host": "my-domain.com",
+          },
+        })
+      );
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe("ok");
+    });
+
+    it("should match custom origins regardless of leading protocols or ports", async () => {
+      app.use(csrf({ origin: "https://my-partner.com:8443" }));
+      app.post("/unsafe", (c) => c.text("ok"));
+
+      const res = await app.fetch(
+        new Request("http://localhost/unsafe", {
+          method: "POST",
+          headers: {
+            "Origin": "http://my-partner.com:3000",
+            "Host": "localhost",
+          },
+        })
+      );
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe("ok");
+    });
   });
 
   describe("Rate Limiting Middleware", () => {
@@ -135,6 +179,32 @@ describe("Cookies, CSRF, Rate Limiting, and Swagger Customization", () => {
       expect(data.error).toBe("Too Many Requests");
       expect(res3.headers.get("Retry-After")).toBeDefined();
     });
+
+    it("should evict rate limiter keys when Map size exceeds 10000", async () => {
+      const middleware = rateLimit({ windowMs: 10000, max: 2 });
+      const next = () => Promise.resolve(new Response("ok"));
+
+      // Request 1 & 2 for 1.2.3.0 -> reaches limit
+      const mockCtx0 = {
+        header: (name: string) => name === "X-Forwarded-For" ? "1.2.3.0" : null,
+        req: { method: "GET", url: "http://localhost/" }
+      } as any;
+      await middleware(mockCtx0, next);
+      await middleware(mockCtx0, next);
+
+      // Now fill map with 10005 other keys to trigger capacity eviction
+      for (let i = 1; i <= 10005; i++) {
+        const mockCtx = {
+          header: (name: string) => name === "X-Forwarded-For" ? `1.2.3.${i}` : null,
+          req: { method: "GET", url: "http://localhost/" }
+        } as any;
+        await middleware(mockCtx, next);
+      }
+
+      // Request 3 for 1.2.3.0 -> if evicted, returns 200. If not, returns 429.
+      const res = await middleware(mockCtx0, next);
+      expect(res.status).toBe(200);
+    });
   });
 
   describe("Swagger / OpenAPI Route Customization", () => {
@@ -158,6 +228,46 @@ describe("Cookies, CSRF, Rate Limiting, and Swagger Customization", () => {
       expect(endpoint.description).toBe("A detailed description explaining what this route does");
       expect(endpoint.tags).toEqual(["custom", "test"]);
       expect(endpoint.deprecated).toBe(true);
+    });
+
+    it("should handle circular/recursive schemas without infinite recursion", async () => {
+      const { z } = await import("zod");
+      
+      const baseCategorySchema = z.object({
+        name: z.string(),
+      });
+      
+      type Category = z.infer<typeof baseCategorySchema> & {
+        subcategories?: Category[];
+      };
+      
+      const categorySchema: z.ZodType<Category> = baseCategorySchema.extend({
+        subcategories: z.lazy(() => categorySchema.array()).optional(),
+      });
+
+      const { schemaToJsonSchema } = await import("../../src/swagger");
+      const jsonSchema = schemaToJsonSchema(categorySchema);
+      
+      expect(jsonSchema.type).toBe("object");
+      expect(jsonSchema.properties.subcategories).toBeDefined();
+      expect(jsonSchema.properties.subcategories.type).toBe("array");
+      expect(jsonSchema.properties.subcategories.items).toEqual({
+        type: "object",
+        description: "Circular reference",
+      });
+    });
+  });
+
+  describe("Radix Parameter Decoding", () => {
+    it("should decode URL-encoded parameter segments in the radix tree", async () => {
+      app.get("/hello/:name", (c) => {
+        return c.json({ name: c.param("name") });
+      });
+
+      const res = await app.fetch(new Request("http://localhost/hello/Saif%20Rehman"));
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.name).toBe("Saif Rehman");
     });
   });
 });
