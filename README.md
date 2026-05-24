@@ -18,18 +18,6 @@
   <strong>Ultra-Fast · Contract-Driven · Compile-Time Type Safety · Zero-Dependency Web Standards Core</strong>
 </p>
 
-<p align="center">
-  <a href="#-what-is-tomoe">Philosophy</a> • 
-  <a href="#-the-power-of-tomoe">The Power</a> • 
-  <a href="#-core-features">Features</a> • 
-  <a href="#-installation">Installation</a> • 
-  <a href="#-quick-start">Quick Start</a> • 
-  <a href="#-complete-guide--api-reference">API Guide</a> • 
-  <a href="#7-custom--built-in-middlewares">Middlewares</a> • 
-  <a href="#8-scope-aware--unified-error-handling-functional--thrown">Errors</a> • 
-  <a href="#12-deployment--runtimes-deploy-anywhere">Deployment</a>
-</p>
-
 ---
 
 ## 🌸 What is Tomoe?
