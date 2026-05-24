@@ -493,4 +493,21 @@ describe("RadixTree", () => {
       expect(estimatedMemory).toBeLessThan(50 * 1024);
     });
   });
+
+  describe("Backtracking and Priority Matching", () => {
+    it("should prioritize parameter routes over wildcards and backtrack if parameter branch fails", () => {
+      tree.insert("GET", "/anime/:id/details", h1);
+      tree.insert("GET", "/anime/*", h2);
+
+      const matchParam = tree.match("GET", "/anime/list/details");
+      expect(matchParam).not.toBeNull();
+      expect(matchParam?.handler).toBe(h1);
+      expect(matchParam?.params).toStrictEqual({ id: "list" });
+
+      const matchWildcard = tree.match("GET", "/anime/list/edit");
+      expect(matchWildcard).not.toBeNull();
+      expect(matchWildcard?.handler).toBe(h2);
+      expect(matchWildcard?.params).toStrictEqual({ "*": "list/edit" });
+    });
+  });
 });
