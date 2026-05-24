@@ -180,6 +180,37 @@ app.use("/anime/*", async (c, next) => {
 })
 ```
 
+### Logger Middleware
+
+Tomoe includes a clean, terminal-colorized request logging middleware that prints request methods, paths, status codes, and execution duration.
+
+```ts
+import { logger } from "tomoejs"
+
+// Register logger globally
+app.use(logger())
+```
+
+### CORS Middleware
+
+Tomoe features a configurable CORS middleware supporting allowed origins, methods, headers, exposed headers, credentials, max-age, and automatically handles preflight `OPTIONS` requests:
+
+```ts
+import { cors } from "tomoejs"
+
+// 1. Default configuration (Allows all origins)
+app.use(cors())
+
+// 2. Custom configuration
+app.use(cors({
+  origin: ["https://my-app.com", "https://admin.my-app.com"],
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
+  maxAge: 86400,
+}))
+```
+
 ---
 
 ## Relics
@@ -459,6 +490,33 @@ const { data: newPost, error } = await client("/posts").post({
 
 ---
 
+## Swagger & OpenAPI Docs
+
+Tomoe has an integrated Swagger UI and OpenAPI 3.0 document generator. It dynamically scans all registered routes, HTTP methods, and relic validation schemas (supporting Zod, TypeBox, Valibot, and generic fallbacks) at compile time.
+
+To set up Swagger UI and OpenAPI documentation for your API, simply call the `swagger` helper:
+
+```ts
+import { Tomoe, swagger } from "tomoejs"
+
+const app = new Tomoe()
+
+// Document endpoints
+app.get("/users/:id", (c) => c.text("ok"))
+
+// Register documentation endpoints (GET /docs and GET /swagger.json)
+swagger(app, {
+  title: "My Custom API Docs",
+  version: "1.2.0",
+  path: "/docs",           // Swagger UI HTML endpoint
+  specPath: "/swagger.json" // OpenAPI spec JSON endpoint
+})
+
+export default app
+```
+
+---
+
 ## Compile
 
 ```ts
@@ -480,6 +538,23 @@ export default {
   port: 4000,
   fetch: (req: Request) => app.fetch(req),
 }
+```
+
+### Node.js Server Adapter
+
+While Tomoe runs natively on edge runtimes (like Bun, Deno, and Cloudflare Workers) because it is built on Web Standards, Node.js still relies on legacy stream-based requests. Tomoe includes a built-in Node adapter to bridge this gap:
+
+```ts
+import { Tomoe } from "tomoejs"
+import { createServer } from "tomoejs/node"
+
+const app = new Tomoe()
+app.get("/", (c) => c.text("Hello Node"))
+
+// Create and listen on a standard Node.js server
+createServer(app).listen(3000, () => {
+  console.log("Server listening on port 3000")
+})
 ```
 
 ---

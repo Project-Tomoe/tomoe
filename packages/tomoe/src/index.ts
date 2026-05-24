@@ -77,4 +77,16 @@ export type {
 } from "./types/inference"
 
 //  Version 
-export const VERSION = "0.0.3"
+export const VERSION = "0.0.5"
+
+// Middlewares
+export { cors } from "./middleware/cors"
+export type { CorsOptions } from "./middleware/cors"
+export { logger } from "./middleware/logger"
+
+// Node Server Adapter
+export { createServer } from "./node"
+
+// Swagger / OpenAPI
+export { swagger, generateOpenApiDoc, schemaToJsonSchema } from "./swagger"
+export type { SwaggerOptions } from "./swagger"

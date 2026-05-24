@@ -150,19 +150,55 @@ async function validateSchema<S extends StandardSchemaV1>(
   throw new Error(`Invalid schema passed to relic.${source}(). Must conform to Standard Schema or Zod interface.`);
 }
 
+function formDataToObject(formData: FormData): Record<string, any> {
+  const obj: Record<string, any> = {};
+  for (const [key, value] of formData.entries()) {
+    if (key in obj) {
+      const existing = obj[key];
+      if (Array.isArray(existing)) {
+        existing.push(value);
+      } else {
+        obj[key] = [existing, value];
+      }
+    } else {
+      obj[key] = value;
+    }
+  }
+  return obj;
+}
+
 export const relic: RelicFactory = Object.assign(relicImpl, {
   body<S extends StandardSchemaV1>(schema: S) {
-    return relicImpl("body", async (ctx: RelicBaseCtx) => {
+    const rel = relicImpl("body", async (ctx: RelicBaseCtx) => {
       try {
-        const raw = await ctx.req.clone().json();
+        const contentType = ctx.req.headers.get("Content-Type") || "";
+        let raw: unknown;
+
+        if (contentType.includes("application/json")) {
+          raw = await ctx.req.clone().json();
+        } else if (
+          contentType.includes("multipart/form-data") ||
+          contentType.includes("application/x-www-form-urlencoded")
+        ) {
+          const fd = await ctx.req.clone().formData();
+          raw = formDataToObject(fd);
+        } else {
+          try {
+            raw = await ctx.req.clone().json();
+          } catch {
+            raw = {};
+          }
+        }
         return validateSchema(schema, raw, "body");
       } catch (e) {
-        return err(new HttpError(400, "Invalid JSON payload"));
+        return err(new HttpError(400, `Invalid body payload: ${e instanceof Error ? e.message : String(e)}`));
       }
     });
+    (rel as any).schema = schema;
+    return rel as any;
   },
   query<S extends StandardSchemaV1>(schema: S) {
-    return relicImpl("query", async (ctx: RelicBaseCtx) => {
+    const rel = relicImpl("query", async (ctx: RelicBaseCtx) => {
       const url = new URL(ctx.req.url);
       const raw: Record<string, string | string[]> = {};
       for (const [key, value] of url.searchParams.entries()) {
@@ -179,21 +215,27 @@ export const relic: RelicFactory = Object.assign(relicImpl, {
       }
       return validateSchema(schema, raw, "query");
     });
+    (rel as any).schema = schema;
+    return rel as any;
   },
   params<S extends StandardSchemaV1>(schema: S) {
-    return relicImpl("params", async (ctx: RelicBaseCtx) => {
+    const rel = relicImpl("params", async (ctx: RelicBaseCtx) => {
       const raw = (ctx as any).params || {};
       return validateSchema(schema, raw, "params");
     });
+    (rel as any).schema = schema;
+    return rel as any;
   },
   headers<S extends StandardSchemaV1>(schema: S) {
-    return relicImpl("headers", async (ctx: RelicBaseCtx) => {
+    const rel = relicImpl("headers", async (ctx: RelicBaseCtx) => {
       const raw: Record<string, string> = {};
       ctx.req.headers.forEach((value: string, key: string) => {
         raw[key] = value;
       });
       return validateSchema(schema, raw, "headers");
     });
+    (rel as any).schema = schema;
+    return rel as any;
   }
 });
 

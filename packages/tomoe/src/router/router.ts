@@ -232,7 +232,7 @@ export class ScopedRouter<R extends Record<string, any> = {}> {
   ): this {
     const fullPath = `${this.#normalizedPrefix}${path === "/" ? "" : path}`
     const wrapped = wrapWithRelics(this.#relics, handler, this.#errorHandlers)
-    this.#parent._registerRoute(method, fullPath, wrapped as any)
+    this.#parent._registerRoute(method, fullPath, wrapped as any, this.#relics)
     return this
   }
 }
@@ -245,7 +245,7 @@ export class Router<
 > {
   #tree: RadixTree
   #middlewares: Array<{ path: string; handler: Middleware }>
-  #routes: Array<{ method: HTTPMethod; path: string; handler: Handler }>
+  #routes: Array<{ method: HTTPMethod; path: string; handler: Handler; relics?: AnyRelic[] }>
   #chainCache: Map<string, (c: Context, final: Handler) => any>
   #isCompiled = false
   #env: E
@@ -499,7 +499,7 @@ export class Router<
     // Inline routes have no scope-level onError — use empty map (default behavior)
     const emptyErrorHandlers = new Map<number, (ctx: Context<any, any, Ctx>) => Response>()
     const wrapped = wrapWithRelics(relicsList, actualHandler as any, emptyErrorHandlers)
-    this.#routes.push({ method, path, handler: wrapped as any })
+    this._registerRoute(method, path, wrapped as any, relicsList)
     return this as any
   }
 
@@ -559,13 +559,15 @@ export class Router<
       wrappedRoutes = subRouter._routes.map((route: any) => {
         const emptyErrorHandlers = new Map<number, (ctx: Context) => Response>()
         const wrapped = wrapWithRelics(group.relics, route.handler, emptyErrorHandlers)
-        return { ...route, handler: wrapped }
+        const combinedRelics = [...group.relics, ...(route.relics || [])]
+        return { ...route, handler: wrapped, relics: combinedRelics }
       })
     }
 
     for (const route of wrappedRoutes) {
       const fullPath = `${prefix}${route.path === "/" ? "" : route.path}`
-      this._registerRoute(route.method, fullPath, route.handler)
+      const combinedRelics = route.relics || []
+      this._registerRoute(route.method, fullPath, route.handler, combinedRelics)
     }
 
     for (const mw of subRouter._middlewares) {
@@ -633,8 +635,8 @@ export class Router<
 
   // Internal
 
-  _registerRoute(method: HTTPMethod, path: string, handler: Handler): void {
-    this.#routes.push({ method, path, handler })
+  _registerRoute(method: HTTPMethod, path: string, handler: Handler, relics: AnyRelic[] = []): void {
+    this.#routes.push({ method, path, handler, relics })
   }
 
   // Compile
@@ -676,7 +678,15 @@ export class Router<
 
   async #dispatch(request: Request, env?: any): Promise<Response> {
     const url = new URL(request.url)
-    const match = this.#tree.match(request.method, url.pathname)
+    let match = this.#tree.match(request.method, url.pathname)
+
+    if (!match && request.method === "OPTIONS") {
+      const methods: HTTPMethod[] = ["GET", "POST", "PUT", "DELETE", "PATCH"]
+      for (const m of methods) {
+        match = this.#tree.match(m, url.pathname)
+        if (match) break
+      }
+    }
 
     if (!match) {
       return new Response("Not Found", { status: 404 })

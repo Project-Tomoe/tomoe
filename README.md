@@ -181,6 +181,9 @@ Relics are validated and optimized at startup.
 * First-class Standard Schema & TypeBox validation relics
 * E2E type-safe path-based Client SDK
 * Scope-aware unified error pipeline & functional error returns (`err(...)`)
+* Built-in CORS & color-formatted Logger middlewares
+* Built-in Node.js server adapter
+* Auto-generated OpenAPI specs & interactive Swagger UI docs
 
 ---
 
