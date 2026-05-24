@@ -12,16 +12,16 @@
  *  - Priority: Static > Dynamic > Wildcard
  */
 
-import { RadixNode, type InternalHandler } from "./node";
+import { type InternalHandler, RadixNode } from "./node"
 
 /**
  * Match result from Radix tree lookup
  */
 
 type MatchResult = {
-  handler: InternalHandler;
-  params: Record<string, string>;
-};
+  handler: InternalHandler
+  params: Record<string, string>
+}
 
 /**
  * RadixTree class
@@ -35,7 +35,7 @@ export class RadixTree {
    * Empty segment, acts as entrypoint (segment = "")
    */
 
-  #root: RadixNode;
+  #root: RadixNode
 
   /**
    * Static route cache (for faster lookups O(1))
@@ -46,11 +46,11 @@ export class RadixTree {
    * note: only stores routes with no dynamic segments
    */
 
-  #staticRoutes: Map<string, InternalHandler>;
+  #staticRoutes: Map<string, InternalHandler>
 
   constructor() {
-    this.#root = new RadixNode();
-    this.#staticRoutes = new Map();
+    this.#root = new RadixNode()
+    this.#staticRoutes = new Map()
   } /**
    * Split path into segements
    * e.g. "/iskekai/moonlit-fanatasy" -> ["isekai", "moonlit-fantasy"]
@@ -59,7 +59,7 @@ export class RadixTree {
    * @returns array of segments
    */
   #splitPath(path: string): string[] {
-    return path.split("/").filter((segment) => segment !== "");
+    return path.split("/").filter((segment) => segment !== "")
   }
 
   /**
@@ -71,58 +71,58 @@ export class RadixTree {
    */
   insert(method: string, path: string, handler: InternalHandler) {
     //TODO: decode param (for Unicode URL)
-    const segments = this.#splitPath(path);
-    const methodAsUpper = method.toUpperCase();
+    const segments = this.#splitPath(path)
+    const methodAsUpper = method.toUpperCase()
 
-    const isStatic = !path.includes(":") && !path.includes("*");
+    const isStatic = !path.includes(":") && !path.includes("*")
 
     if (isStatic) {
-      const key = `${methodAsUpper}:${path}`;
-      this.#staticRoutes.set(key, handler);
+      const key = `${methodAsUpper}:${path}`
+      this.#staticRoutes.set(key, handler)
     }
 
-    let node = this.#root;
+    let node = this.#root
 
     for (let i = 0; i < segments.length; i++) {
-      const segment = segments[i];
+      const segment = segments[i]
 
       if (segment?.startsWith(":")) {
-        const paramName = segment.slice(1);
+        const paramName = segment.slice(1)
 
         if (!node.paramChild) {
-          node.paramChild = new RadixNode(segment);
-          node.paramChild.paramName = paramName;
+          node.paramChild = new RadixNode(segment)
+          node.paramChild.paramName = paramName
         } else if (node.paramChild.paramName !== paramName) {
           console.warn(
             `Parameter name conflict at ${path}: ` +
-              `existing "${node.paramChild.paramName}", new ${paramName} Using existing`,
-          );
+              `existing "${node.paramChild.paramName}", new ${paramName} Using existing`
+          )
         }
 
-        node = node.paramChild;
+        node = node.paramChild
       } else if (segment?.startsWith("*")) {
         if (!node.wildcardChild) {
-          node.wildcardChild = new RadixNode(segment);
+          node.wildcardChild = new RadixNode(segment)
         }
 
-        node = node.wildcardChild;
+        node = node.wildcardChild
       } else {
-        let child = node.getChild(segment as string);
+        let child = node.getChild(segment as string)
 
         if (!child) {
-          child = new RadixNode(segment);
-          node.addChild(segment as string, child);
+          child = new RadixNode(segment)
+          node.addChild(segment as string, child)
         }
 
-        node = child;
+        node = child
       }
     }
 
     if (node.hasHandler(methodAsUpper)) {
-      console.warn(`Route already registered ${method} ${path}. Overwriting.`);
+      console.warn(`Route already registered ${method} ${path}. Overwriting.`)
     }
 
-    node.addHandler(methodAsUpper, handler);
+    node.addHandler(methodAsUpper, handler)
   }
 
   /**
@@ -133,83 +133,83 @@ export class RadixTree {
    * @returns Match result or null
    */
   match(method: string, path: string): MatchResult | null {
-    const methodAsUpper = method.toUpperCase();
-    const staticKey = `${methodAsUpper}:${path}`;
-    const staticHandler = this.#staticRoutes.get(staticKey);
+    const methodAsUpper = method.toUpperCase()
+    const staticKey = `${methodAsUpper}:${path}`
+    const staticHandler = this.#staticRoutes.get(staticKey)
 
     if (staticHandler) {
       return {
         handler: staticHandler,
         params: {},
-      };
+      }
     }
 
-    const segments = this.#splitPath(path);
-    return this.#matchSegments(this.#root, segments, 0, methodAsUpper);
+    const segments = this.#splitPath(path)
+    return this.#matchSegments(this.#root, segments, 0, methodAsUpper)
   }
 
   #matchSegments(
     node: RadixNode,
     segments: string[],
     index: number,
-    method: string,
+    method: string
   ): MatchResult | null {
     if (index === segments.length) {
-      const handler = node.getHandler(method);
+      const handler = node.getHandler(method)
       if (handler) {
-        return { handler, params: {} };
+        return { handler, params: {} }
       }
       // If we are at the end of segments, but there is a wildcard child,
       // we can match it with an empty string remainder.
       if (node.wildcardChild) {
-        const handler = node.wildcardChild.getHandler(method);
+        const handler = node.wildcardChild.getHandler(method)
         if (handler) {
-          return { handler, params: { "*": "" } };
+          return { handler, params: { "*": "" } }
         }
       }
-      return null;
+      return null
     }
 
-    const segment = segments[index] as string;
+    const segment = segments[index] as string
 
     // Priority 1: Static Child Match
     if (node.hasChildren()) {
-      const child = node.getChild(segment);
+      const child = node.getChild(segment)
       if (child) {
-        const result = this.#matchSegments(child, segments, index + 1, method);
-        if (result) return result;
+        const result = this.#matchSegments(child, segments, index + 1, method)
+        if (result) return result
       }
     }
 
     // Priority 2: Parameter Child Match
     if (node.paramChild) {
-      const paramName = node.paramChild.paramName;
+      const paramName = node.paramChild.paramName
       if (paramName) {
-        const result = this.#matchSegments(node.paramChild, segments, index + 1, method);
+        const result = this.#matchSegments(node.paramChild, segments, index + 1, method)
         if (result) {
           try {
-            result.params[paramName] = decodeURIComponent(segment);
+            result.params[paramName] = decodeURIComponent(segment)
           } catch {
-            result.params[paramName] = segment;
+            result.params[paramName] = segment
           }
-          return result;
+          return result
         }
       }
     }
 
     // Priority 3: Wildcard Child Match
     if (node.wildcardChild) {
-      const handler = node.wildcardChild.getHandler(method);
+      const handler = node.wildcardChild.getHandler(method)
       if (handler) {
-        const remainingPath = segments.slice(index).join("/");
+        const remainingPath = segments.slice(index).join("/")
         return {
           handler,
           params: { "*": remainingPath },
-        };
+        }
       }
     }
 
-    return null;
+    return null
   }
 
   /**
@@ -219,31 +219,31 @@ export class RadixTree {
    */
 
   getRoutes(): Array<{ method: string; path: string }> {
-    const routes: Array<{ method: string; path: string }> = [];
+    const routes: Array<{ method: string; path: string }> = []
     const traverse = (node: RadixNode, pathParts: string[]) => {
-      const path = `/${pathParts.join("/")}`;
+      const path = `/${pathParts.join("/")}`
 
       if (node.handlers) {
         for (const method of node.handlers.keys()) {
-          routes.push({ method, path: path || "/" });
+          routes.push({ method, path: path || "/" })
         }
       }
 
       for (const [segment, child] of node.children) {
-        traverse(child, [...pathParts, segment]);
+        traverse(child, [...pathParts, segment])
       }
 
       if (node.paramChild) {
-        traverse(node.paramChild, [...pathParts, node.paramChild.segment]);
+        traverse(node.paramChild, [...pathParts, node.paramChild.segment])
       }
 
       if (node.wildcardChild) {
-        traverse(node.wildcardChild, [...pathParts, "*"]);
+        traverse(node.wildcardChild, [...pathParts, "*"])
       }
-    };
+    }
 
-    traverse(this.#root, []);
-    return routes;
+    traverse(this.#root, [])
+    return routes
   }
 
   /**
@@ -251,31 +251,31 @@ export class RadixTree {
    */
 
   getStats(): {
-    nodeCount: number;
-    staticRouteCount: number;
-    maxDepth: number;
+    nodeCount: number
+    staticRouteCount: number
+    maxDepth: number
   } {
-    let nodeCount = 0;
-    let maxDepth = 0;
+    let nodeCount = 0
+    let maxDepth = 0
 
     const traverse = (node: RadixNode, depth: number) => {
-      nodeCount++;
-      maxDepth = Math.max(depth, maxDepth);
+      nodeCount++
+      maxDepth = Math.max(depth, maxDepth)
 
       for (const child of node.children.values()) {
-        traverse(child, depth + 1);
+        traverse(child, depth + 1)
       }
 
-      if (node.paramChild) traverse(node.paramChild, depth + 1);
-      if (node.wildcardChild) traverse(node.wildcardChild, depth + 1);
-    };
+      if (node.paramChild) traverse(node.paramChild, depth + 1)
+      if (node.wildcardChild) traverse(node.wildcardChild, depth + 1)
+    }
 
-    traverse(this.#root, 0);
+    traverse(this.#root, 0)
 
     return {
       nodeCount,
       staticRouteCount: this.#staticRoutes.size,
       maxDepth,
-    };
+    }
   }
 }

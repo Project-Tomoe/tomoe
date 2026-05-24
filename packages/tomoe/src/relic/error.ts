@@ -17,28 +17,23 @@
  */
 
 export class HttpError extends Error {
-    readonly status: number;
-    readonly details?: any;
+  readonly status: number
+  readonly details?: any
 
-    constructor(status: number, message?: string, details?: any) {
-        super(message ?? defaultMessage(status));
-        this.name = "HttpError";
-        this.status = status;
-        this.details = details;
-    }
+  constructor(status: number, message?: string, details?: any) {
+    super(message ?? defaultMessage(status))
+    this.name = "HttpError"
+    this.status = status
+    this.details = details
+  }
 
-    toResponse(): Response {
-        const body = this.details
-            ? { error: this.message, ...this.details }
-            : { error: this.message };
-        return new Response(
-            JSON.stringify(body),
-            {
-                status: this.status,
-                headers: { "Content-Type": "application/json; charset=utf-8" },
-            }
-        )    
-    }
+  toResponse(): Response {
+    const body = this.details ? { error: this.message, ...this.details } : { error: this.message }
+    return new Response(JSON.stringify(body), {
+      status: this.status,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+    })
+  }
 }
 
 /**
@@ -55,25 +50,25 @@ export function httpError(status: number, message?: string): HttpError {
 /**
  * Common pre-built errors - import and use directly
  */
-export const BadRequest          = httpError(400)
-export const Unauthorized        = httpError(401)
-export const PaymentRequired     = httpError(402)
-export const Forbidden           = httpError(403)
-export const NotFound            = httpError(404)
-export const MethodNotAllowed    = httpError(405)
-export const NotAcceptable       = httpError(406)
-export const RequestTimeout      = httpError(408)
-export const Conflict            = httpError(409)
-export const Gone                = httpError(410)
-export const PayloadTooLarge     = httpError(413)
-export const UnsupportedMediaType= httpError(415)
+export const BadRequest = httpError(400)
+export const Unauthorized = httpError(401)
+export const PaymentRequired = httpError(402)
+export const Forbidden = httpError(403)
+export const NotFound = httpError(404)
+export const MethodNotAllowed = httpError(405)
+export const NotAcceptable = httpError(406)
+export const RequestTimeout = httpError(408)
+export const Conflict = httpError(409)
+export const Gone = httpError(410)
+export const PayloadTooLarge = httpError(413)
+export const UnsupportedMediaType = httpError(415)
 export const UnprocessableEntity = httpError(422)
-export const TooManyRequests     = httpError(429)
-export const ServerError         = httpError(500)
-export const NotImplemented      = httpError(501)
-export const BadGateway          = httpError(502)
-export const ServiceUnavailable  = httpError(503)
-export const GatewayTimeout      = httpError(504)
+export const TooManyRequests = httpError(429)
+export const ServerError = httpError(500)
+export const NotImplemented = httpError(501)
+export const BadGateway = httpError(502)
+export const ServiceUnavailable = httpError(503)
+export const GatewayTimeout = httpError(504)
 
 function defaultMessage(status: number): string {
   const messages: Record<number, string> = {

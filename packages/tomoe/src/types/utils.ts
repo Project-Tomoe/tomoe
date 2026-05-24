@@ -17,8 +17,8 @@
  */
 
 export type Prettify<T> = {
-  [K in keyof T]: T[K];
-} & {};
+  [K in keyof T]: T[K]
+} & {}
 
 /**
  * UnionToIntersection - converts union type to intersection.
@@ -29,11 +29,11 @@ export type Prettify<T> = {
  *    // Result : {a: string} & {b: string} & {c: string}
  */
 
-export type UnionToIntersection<T> = (
-  T extends any ? (x: T) => void : never
-) extends (x: infer U) => void
+export type UnionToIntersection<T> = (T extends any ? (x: T) => void : never) extends (
+  x: infer U
+) => void
   ? U
-  : never;
+  : never
 
 /**
  * Simplify - Remove never types from object.
@@ -45,8 +45,8 @@ export type UnionToIntersection<T> = (
  */
 
 export type Simplify<T> = {
-  [K in keyof T as T[K] extends never ? never : K]: T[K];
-};
+  [K in keyof T as T[K] extends never ? never : K]: T[K]
+}
 
 /**
  * Merge - Deep Merge two object types.
@@ -59,7 +59,7 @@ export type Simplify<T> = {
  *      // Result : { a: string; b: string; c: string; d: string;}
  */
 
-export type Merge<T, U> = Prettify<T & U>;
+export type Merge<T, U> = Prettify<T & U>
 
 /**
  * IsNever - check if type is never.
@@ -69,7 +69,7 @@ export type Merge<T, U> = Prettify<T & U>;
  *    type A = IsNever<string> // false
  */
 
-export type IsNever<T> = [T] extends [never] ? true : false;
+export type IsNever<T> = [T] extends [never] ? true : false
 
 /**
  * IsAny - Check if type is any
@@ -78,4 +78,4 @@ export type IsNever<T> = [T] extends [never] ? true : false;
  * - `0 extends 1 & T` is only true when T is any
  * - This exploits how `any` breaks type system rules
  */
-export type IsAny<T> = 0 extends 1 & T ? true : false;
+export type IsAny<T> = 0 extends 1 & T ? true : false

@@ -13,38 +13,40 @@
  *  5. Relic store for typed scope context (populated by relic executor)
  */
 
-import type { Prettify } from "./types/utils"
 import type { ProvidingRelic } from "./relic/relic"
+import type { Prettify } from "./types/utils"
 
 export interface TypedResponse<T = any> extends Response {
-  readonly __type?: T;
+  readonly __type?: T
 }
 
 export interface CookieOptions {
-  domain?: string;
-  path?: string;
-  expires?: Date;
-  maxAge?: number;
-  httpOnly?: boolean;
-  secure?: boolean;
-  sameSite?: "Strict" | "Lax" | "None";
+  domain?: string
+  path?: string
+  expires?: Date
+  maxAge?: number
+  httpOnly?: boolean
+  secure?: boolean
+  sameSite?: "Strict" | "Lax" | "None"
 }
 
-const COOKIE_NAME_REGEXP = /^[\x21\x23-\x27\x2A-\x2B\x2D-\x2E\x30-\x39\x41-\x5A\x5E-\x7A\x7C\x7E]+$/;
+const COOKIE_NAME_REGEXP = /^[\x21\x23-\x27\x2A-\x2B\x2D-\x2E\x30-\x39\x41-\x5A\x5E-\x7A\x7C\x7E]+$/
 
 function serializeCookie(name: string, value: string, options: CookieOptions = {}): string {
   if (!COOKIE_NAME_REGEXP.test(name)) {
-    throw new Error(`Invalid cookie name "${name}". Cookie names can only contain valid US-ASCII characters according to RFC 6265.`);
+    throw new Error(
+      `Invalid cookie name "${name}". Cookie names can only contain valid US-ASCII characters according to RFC 6265.`
+    )
   }
-  let str = `${name}=${encodeURIComponent(value)}`;
-  if (options.domain) str += `; Domain=${options.domain}`;
-  if (options.path) str += `; Path=${options.path}`;
-  if (options.expires) str += `; Expires=${options.expires.toUTCString()}`;
-  if (options.maxAge !== undefined) str += `; Max-Age=${options.maxAge}`;
-  if (options.httpOnly) str += `; HttpOnly`;
-  if (options.secure) str += `; Secure`;
-  if (options.sameSite) str += `; SameSite=${options.sameSite}`;
-  return str;
+  let str = `${name}=${encodeURIComponent(value)}`
+  if (options.domain) str += `; Domain=${options.domain}`
+  if (options.path) str += `; Path=${options.path}`
+  if (options.expires) str += `; Expires=${options.expires.toUTCString()}`
+  if (options.maxAge !== undefined) str += `; Max-Age=${options.maxAge}`
+  if (options.httpOnly) str += "; HttpOnly"
+  if (options.secure) str += "; Secure"
+  if (options.sameSite) str += `; SameSite=${options.sameSite}`
+  return str
 }
 
 /**
@@ -105,7 +107,11 @@ export class Context<
   /**
    * List of cookies queued to be set in responses.
    */
-  private _cookiesToSet: Array<{ name: string; value: string; options?: CookieOptions | undefined }> = []
+  private _cookiesToSet: Array<{
+    name: string
+    value: string
+    options?: CookieOptions | undefined
+  }> = []
 
   /**
    * Cache of parsed request cookies.
@@ -116,7 +122,7 @@ export class Context<
     req: Request,
     params: P = {} as P,
     env: E = {} as E,
-    executionCtx?: ExecutionContext,
+    executionCtx?: ExecutionContext
   ) {
     this.req = req
     this._params = params
@@ -132,31 +138,33 @@ export class Context<
   /** Get a request cookie by name */
   cookie(name: string): string | undefined {
     if (!this._parsedCookies) {
-      const cookieHeader = this.req.headers.get("Cookie");
+      const cookieHeader = this.req.headers.get("Cookie")
       if (!cookieHeader) {
-        this._parsedCookies = {};
+        this._parsedCookies = {}
       } else {
-        this._parsedCookies = cookieHeader.split(";").reduce((acc, pair) => {
-          const [k, v] = pair.split("=").map((s) => s.trim());
-          if (k && v) {
-            try {
-              acc[k] = decodeURIComponent(v);
-            } catch {
-              acc[k] = v;
+        this._parsedCookies = cookieHeader.split(";").reduce(
+          (acc, pair) => {
+            const [k, v] = pair.split("=").map((s) => s.trim())
+            if (k && v) {
+              try {
+                acc[k] = decodeURIComponent(v)
+              } catch {
+                acc[k] = v
+              }
             }
-          }
-          return acc;
-        }, {} as Record<string, string>);
+            return acc
+          },
+          {} as Record<string, string>
+        )
       }
     }
-    return this._parsedCookies[name];
+    return this._parsedCookies[name]
   }
 
   /** Queue a cookie to be set on the response */
   setCookie(name: string, value: string, options?: CookieOptions): void {
-    this._cookiesToSet.push({ name, value, options });
+    this._cookiesToSet.push({ name, value, options })
   }
-
 
   get _parsedUrl(): URL {
     if (!this._url) this._url = new URL(this.req.url)
@@ -267,22 +275,19 @@ export class Context<
 
     if (value === undefined) {
       throw new Error(
-        `ctx.relic(${targetRelic.name || "anonymous"}): value not found. ` +
-        `Make sure this route is inside a scope with a relic that provides it.`
+        `ctx.relic(${targetRelic.name || "anonymous"}): value not found. Make sure this route is inside a scope with a relic that provides it.`
       )
     }
 
     return value as T
   }
 
-
-
   private _injectHeaders(init?: ResponseInit): Headers {
-    const headers = new Headers(init?.headers);
+    const headers = new Headers(init?.headers)
     for (const cookie of this._cookiesToSet) {
-      headers.append("Set-Cookie", serializeCookie(cookie.name, cookie.value, cookie.options));
+      headers.append("Set-Cookie", serializeCookie(cookie.name, cookie.value, cookie.options))
     }
-    return headers;
+    return headers
   }
 
   /**
@@ -290,9 +295,9 @@ export class Context<
    * Sets Content-Type: application/json automatically.
    */
   json<T = any>(data: T, init?: ResponseInit): TypedResponse<T> {
-    const headers = this._injectHeaders(init);
+    const headers = this._injectHeaders(init)
     if (!headers.has("Content-Type")) {
-      headers.set("Content-Type", "application/json; charset=utf-8");
+      headers.set("Content-Type", "application/json; charset=utf-8")
     }
     return new Response(JSON.stringify(data), {
       status: 200,
@@ -305,9 +310,9 @@ export class Context<
    * Plain text response.
    */
   text(text: string, init?: ResponseInit): Response {
-    const headers = this._injectHeaders(init);
+    const headers = this._injectHeaders(init)
     if (!headers.has("Content-Type")) {
-      headers.set("Content-Type", "text/plain; charset=utf-8");
+      headers.set("Content-Type", "text/plain; charset=utf-8")
     }
     return new Response(text, {
       status: 200,
@@ -323,9 +328,9 @@ export class Context<
    * Escape user data before passing to this method.
    */
   html(html: string, init?: ResponseInit): Response {
-    const headers = this._injectHeaders(init);
+    const headers = this._injectHeaders(init)
     if (!headers.has("Content-Type")) {
-      headers.set("Content-Type", "text/html; charset=utf-8");
+      headers.set("Content-Type", "text/html; charset=utf-8")
     }
     return new Response(html, {
       status: 200,
@@ -339,8 +344,8 @@ export class Context<
    * Default: 302 (temporary). Pass 301 for permanent.
    */
   redirect(url: string, status: 301 | 302 = 302): Response {
-    const headers = this._injectHeaders();
-    headers.set("Location", url);
+    const headers = this._injectHeaders()
+    headers.set("Location", url)
     return new Response(null, {
       status,
       headers,
@@ -353,7 +358,6 @@ export class Context<
   notFound(message = "Not Found"): Response {
     return this.text(message, { status: 404 })
   }
-
 
   /**
    * Execution context — Cloudflare Workers specific.

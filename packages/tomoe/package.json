@@ -17,10 +17,7 @@
       "import": "./dist/types/index.js"
     }
   },
-  "files": [
-    "dist",
-    "README.md"
-  ],
+  "files": ["dist", "README.md"],
   "scripts": {
     "build": "tsc --project tsconfig.build.json",
     "prepublishOnly": "node -e \"require('fs').copyFileSync('../../README.md', './README.md')\"",

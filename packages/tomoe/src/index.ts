@@ -37,7 +37,6 @@ export type { Env, ExecutionContext } from "./context"
 export { createClient } from "./client"
 export type { Client } from "./client"
 
-
 // Relic definition
 export { relic, guard } from "./relic/relic"
 export type {
@@ -98,7 +97,7 @@ export type {
   IsStaticPath,
 } from "./types/inference"
 
-//  Version 
+//  Version
 export const VERSION = "1.0.0-rc.1"
 
 // Context types

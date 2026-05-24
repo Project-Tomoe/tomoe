@@ -1,5 +1,5 @@
-import { Hono } from "hono"
 import { serve } from "@hono/node-server"
+import { Hono } from "hono"
 
 const app = new Hono()
 
@@ -39,21 +39,24 @@ app.get("/protected", (c) => {
   return c.json({ secret: "hono-confidential-data" })
 })
 
-const port = parseInt(process.env.PORT || "3000", 10)
+const port = Number.parseInt(process.env.PORT || "3000", 10)
 
 if (typeof Bun !== "undefined") {
   // Native Bun.serve entry path for extreme Hono speed on Bun
   Bun.serve({
     port,
-    fetch: app.fetch
+    fetch: app.fetch,
   })
   console.log(`Hono native Bun server listening on port ${port}`)
 } else {
   // Legacy Node.js server
-  serve({
-    fetch: app.fetch,
-    port
-  }, () => {
-    console.log(`Hono Node adapter bench server listening on port ${port}`)
-  })
+  serve(
+    {
+      fetch: app.fetch,
+      port,
+    },
+    () => {
+      console.log(`Hono Node adapter bench server listening on port ${port}`)
+    }
+  )
 }

@@ -3,64 +3,62 @@
  */
 
 import { Context, type Env } from "../context"
-import type { ParamsObject } from "../types/inference"
-import type { RelicGroup } from "../relic/unite"
-import type { AnyRelic, ProvidingRelic } from "../relic/relic"
-import { executeRelics, validateRelicChain } from "../relic/executor"
 import { HttpError } from "../relic/error"
+import { executeRelics, validateRelicChain } from "../relic/executor"
+import type { AnyRelic, ProvidingRelic } from "../relic/relic"
+import { type Err, isErr } from "../relic/result"
+import type { RelicGroup } from "../relic/unite"
 import { unite } from "../relic/unite"
-import { RadixTree } from "./radix"
+import type { ParamsObject } from "../types/inference"
 import type { ExtractFromRelics } from "../types/standard-schema"
-import { isErr, type Err } from "../relic/result"
+import { RadixTree } from "./radix"
 
-// Handler & Middleware types 
+// Handler & Middleware types
 
 export type RouteRecord = {
-  params: any;
-  query: any;
-  body: any;
-  headers: any;
-  response: any;
-};
+  params: any
+  query: any
+  body: any
+  headers: any
+  response: any
+}
 
 export interface RouteOptions {
-  summary?: string;
-  description?: string;
-  tags?: string[];
-  deprecated?: boolean;
+  summary?: string
+  description?: string
+  tags?: string[]
+  deprecated?: boolean
 }
 
 export type RelicContext<R> = R extends RelicGroup<any, infer Ctx>
   ? Ctx
   : R extends ProvidingRelic<infer Name, infer T>
-  ? [Name] extends [never]
-    ? {}
-    : { [K in Name]: T }
-  : {};
+    ? [Name] extends [never]
+      ? {}
+      : { [K in Name]: T }
+    : {}
 
 export type PrefixRoutes<
   Prefix extends string,
   Routes extends Record<string, Record<string, RouteRecord>>,
-  RelicsInput = never
+  RelicsInput = never,
 > = {
-  [K in keyof Routes as K extends string
-    ? `${Prefix}${K extends "/" ? "" : K}`
-    : never]: {
+  [K in keyof Routes as K extends string ? `${Prefix}${K extends "/" ? "" : K}` : never]: {
     [Method in keyof Routes[K]]: {
-      params: Routes[K][Method]["params"];
+      params: Routes[K][Method]["params"]
       query: ExtractFromRelics<RelicsInput, "query"> extends never
         ? Routes[K][Method]["query"]
-        : ExtractFromRelics<RelicsInput, "query">;
+        : ExtractFromRelics<RelicsInput, "query">
       body: ExtractFromRelics<RelicsInput, "body"> extends never
         ? Routes[K][Method]["body"]
-        : ExtractFromRelics<RelicsInput, "body">;
+        : ExtractFromRelics<RelicsInput, "body">
       headers: ExtractFromRelics<RelicsInput, "headers"> extends never
         ? Routes[K][Method]["headers"]
-        : ExtractFromRelics<RelicsInput, "headers">;
-      response: Routes[K][Method]["response"];
-    };
-  };
-};
+        : ExtractFromRelics<RelicsInput, "headers">
+      response: Routes[K][Method]["response"]
+    }
+  }
+}
 
 export type Handler<
   E extends Env = Env,
@@ -71,7 +69,7 @@ export type Handler<
 
 export type Middleware<E extends Env = any> = (
   c: Context<E>,
-  next: () => Promise<Response>,
+  next: () => Promise<Response>
 ) => Promise<Response>
 
 export type HTTPMethod = "GET" | "POST" | "PUT" | "DELETE" | "PATCH"
@@ -83,9 +81,7 @@ export type HTTPMethod = "GET" | "POST" | "PUT" | "DELETE" | "PATCH"
  *   - Single relic       → app.get('/me', authRelic, handler)
  *   - Group from unite() → app.get('/me', unite(authRelic, orgRelic), handler)
  */
-type RelicInput<Ctx extends Record<string, any> = any> =
-  | AnyRelic
-  | RelicGroup<AnyRelic[], Ctx>
+type RelicInput<Ctx extends Record<string, any> = any> = AnyRelic | RelicGroup<AnyRelic[], Ctx>
 
 /**
  * Normalize a RelicInput into a RelicGroup.
@@ -100,7 +96,7 @@ function normalizeRelics<Ctx extends Record<string, any>>(
   return unite(input as AnyRelic) as RelicGroup<AnyRelic[], Ctx>
 }
 
-// Middleware identity (for chain caching) 
+// Middleware identity (for chain caching)
 
 type AnyMiddleware = Middleware<any>
 
@@ -125,9 +121,12 @@ const getMwId = (fn: Middleware): string => {
 function wrapWithRelics<P extends Record<string, string>, R extends Record<string, any>>(
   relics: AnyRelic[],
   handler: Handler<any, P, R>,
-  errorHandlers: Map<number, (ctx: Context<any, any, R>) => Response | Promise<Response>>,
+  errorHandlers: Map<number, (ctx: Context<any, any, R>) => Response | Promise<Response>>
 ): Handler<any, P, R> {
-  const providingRelics = relics.filter((r) => r._kind === "providing") as ProvidingRelic<any, any>[];
+  const providingRelics = relics.filter((r) => r._kind === "providing") as ProvidingRelic<
+    any,
+    any
+  >[]
 
   return async (ctx) => {
     const relicError = await executeRelics(relics, ctx)
@@ -141,7 +140,7 @@ function wrapWithRelics<P extends Record<string, string>, R extends Record<strin
     const wrapCtx = Object.create(ctx)
     for (let i = 0; i < providingRelics.length; i++) {
       const rel = providingRelics[i]
-      if (rel && rel.name) {
+      if (rel?.name) {
         Object.defineProperty(wrapCtx, rel.name, {
           value: ctx._getRelicByName(rel.name),
           writable: true,
@@ -192,16 +191,14 @@ export class ScopedRouter<R extends Record<string, any> = {}> {
   }
 
   get #normalizedPrefix(): string {
-    return this.#prefix.endsWith("/")
-      ? this.#prefix.slice(0, -1)
-      : this.#prefix
+    return this.#prefix.endsWith("/") ? this.#prefix.slice(0, -1) : this.#prefix
   }
 
   get<Path extends string>(path: Path, handler: Handler<any, ParamsObject<Path>, R>): this
   get<Path extends string, RelicsInput extends RelicInput>(
     path: Path,
     relics: RelicsInput,
-    handler: Handler<any, ParamsObject<Path>, R & RelicContext<RelicsInput>>,
+    handler: Handler<any, ParamsObject<Path>, R & RelicContext<RelicsInput>>
   ): this
   get(path: string, relicsOrHandler: any, handler?: any): this {
     return this.#register("GET", path, relicsOrHandler, handler)
@@ -211,7 +208,7 @@ export class ScopedRouter<R extends Record<string, any> = {}> {
   post<Path extends string, RelicsInput extends RelicInput>(
     path: Path,
     relics: RelicsInput,
-    handler: Handler<any, ParamsObject<Path>, R & RelicContext<RelicsInput>>,
+    handler: Handler<any, ParamsObject<Path>, R & RelicContext<RelicsInput>>
   ): this
   post(path: string, relicsOrHandler: any, handler?: any): this {
     return this.#register("POST", path, relicsOrHandler, handler)
@@ -221,7 +218,7 @@ export class ScopedRouter<R extends Record<string, any> = {}> {
   put<Path extends string, RelicsInput extends RelicInput>(
     path: Path,
     relics: RelicsInput,
-    handler: Handler<any, ParamsObject<Path>, R & RelicContext<RelicsInput>>,
+    handler: Handler<any, ParamsObject<Path>, R & RelicContext<RelicsInput>>
   ): this
   put(path: string, relicsOrHandler: any, handler?: any): this {
     return this.#register("PUT", path, relicsOrHandler, handler)
@@ -231,7 +228,7 @@ export class ScopedRouter<R extends Record<string, any> = {}> {
   delete<Path extends string, RelicsInput extends RelicInput>(
     path: Path,
     relics: RelicsInput,
-    handler: Handler<any, ParamsObject<Path>, R & RelicContext<RelicsInput>>,
+    handler: Handler<any, ParamsObject<Path>, R & RelicContext<RelicsInput>>
   ): this
   delete(path: string, relicsOrHandler: any, handler?: any): this {
     return this.#register("DELETE", path, relicsOrHandler, handler)
@@ -241,7 +238,7 @@ export class ScopedRouter<R extends Record<string, any> = {}> {
   patch<Path extends string, RelicsInput extends RelicInput>(
     path: Path,
     relics: RelicsInput,
-    handler: Handler<any, ParamsObject<Path>, R & RelicContext<RelicsInput>>,
+    handler: Handler<any, ParamsObject<Path>, R & RelicContext<RelicsInput>>
   ): this
   patch(path: string, relicsOrHandler: any, handler?: any): this {
     return this.#register("PATCH", path, relicsOrHandler, handler)
@@ -256,18 +253,13 @@ export class ScopedRouter<R extends Record<string, any> = {}> {
    */
   onError(
     status: number,
-    handler: (ctx: Context<any, any, R>) => Response | Promise<Response>,
+    handler: (ctx: Context<any, any, R>) => Response | Promise<Response>
   ): this {
     this.#errorHandlers.set(status, handler)
     return this
   }
 
-  #register(
-    method: HTTPMethod,
-    path: string,
-    relicsOrHandler: any,
-    handler?: any,
-  ): this {
+  #register(method: HTTPMethod, path: string, relicsOrHandler: any, handler?: any): this {
     let actualHandler: any
     let combinedRelics = [...this.#relics]
 
@@ -290,21 +282,27 @@ export class ScopedRouter<R extends Record<string, any> = {}> {
 
 export class Router<
   E extends Env = Env,
-  Routes extends Record<string, Record<string, RouteRecord>> = {}
+  Routes extends Record<string, Record<string, RouteRecord>> = {},
 > {
   #tree: RadixTree
   #middlewares: Array<{ path: string; handler: Middleware }>
-  #routes: Array<{ method: HTTPMethod; path: string; handler: Handler; relics?: AnyRelic[]; options?: RouteOptions | undefined }>
+  #routes: Array<{
+    method: HTTPMethod
+    path: string
+    handler: Handler
+    relics?: AnyRelic[]
+    options?: RouteOptions | undefined
+  }>
   #chainCache: Map<string, (c: Context, final: Handler) => any>
   #isCompiled = false
   #env: E
 
   /** Global error handler — safe 500 by default, no details leaked */
   #errorHandler: (err: unknown, ctx?: Context) => Response = () =>
-    new Response(
-      JSON.stringify({ error: "Internal Server Error" }),
-      { status: 500, headers: { "Content-Type": "application/json; charset=utf-8" } }
-    )
+    new Response(JSON.stringify({ error: "Internal Server Error" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+    })
 
   constructor(env: E = {} as E) {
     this.#tree = new RadixTree()
@@ -315,8 +313,12 @@ export class Router<
   }
 
   // Sibling access helpers (safe compiled getters)
-  get _routes() { return this.#routes }
-  get _middlewares() { return this.#middlewares }
+  get _routes() {
+    return this.#routes
+  }
+  get _middlewares() {
+    return this.#middlewares
+  }
 
   // HTTP methods
   //
@@ -331,38 +333,38 @@ export class Router<
   get<Path extends string, Res = Response>(
     path: Path,
     handler: Handler<E, ParamsObject<Path>, {}, Res>,
-    options?: RouteOptions,
+    options?: RouteOptions
   ): Router<
     E,
     Routes & {
       [P in Path]: {
         GET: {
-          params: ParamsObject<P>;
-          query: never;
-          body: never;
-          headers: never;
-          response: Res;
-        };
-      };
+          params: ParamsObject<P>
+          query: never
+          body: never
+          headers: never
+          response: Res
+        }
+      }
     }
   >
   get<Path extends string, RelicsInput extends RelicInput, Res = Response>(
     path: Path,
     relics: RelicsInput,
     handler: Handler<E, ParamsObject<Path>, RelicContext<RelicsInput>, Res>,
-    options?: RouteOptions,
+    options?: RouteOptions
   ): Router<
     E,
     Routes & {
       [P in Path]: {
         GET: {
-          params: ParamsObject<P>;
-          query: ExtractFromRelics<RelicsInput, "query">;
-          body: ExtractFromRelics<RelicsInput, "body">;
-          headers: ExtractFromRelics<RelicsInput, "headers">;
-          response: Res;
-        };
-      };
+          params: ParamsObject<P>
+          query: ExtractFromRelics<RelicsInput, "query">
+          body: ExtractFromRelics<RelicsInput, "body">
+          headers: ExtractFromRelics<RelicsInput, "headers">
+          response: Res
+        }
+      }
     }
   >
   get(path: string, relicsOrHandler: any, handler?: any, options?: RouteOptions): any {
@@ -372,38 +374,38 @@ export class Router<
   post<Path extends string, Res = Response>(
     path: Path,
     handler: Handler<E, ParamsObject<Path>, {}, Res>,
-    options?: RouteOptions,
+    options?: RouteOptions
   ): Router<
     E,
     Routes & {
       [P in Path]: {
         POST: {
-          params: ParamsObject<P>;
-          query: never;
-          body: never;
-          headers: never;
-          response: Res;
-        };
-      };
+          params: ParamsObject<P>
+          query: never
+          body: never
+          headers: never
+          response: Res
+        }
+      }
     }
   >
   post<Path extends string, RelicsInput extends RelicInput, Res = Response>(
     path: Path,
     relics: RelicsInput,
     handler: Handler<E, ParamsObject<Path>, RelicContext<RelicsInput>, Res>,
-    options?: RouteOptions,
+    options?: RouteOptions
   ): Router<
     E,
     Routes & {
       [P in Path]: {
         POST: {
-          params: ParamsObject<P>;
-          query: ExtractFromRelics<RelicsInput, "query">;
-          body: ExtractFromRelics<RelicsInput, "body">;
-          headers: ExtractFromRelics<RelicsInput, "headers">;
-          response: Res;
-        };
-      };
+          params: ParamsObject<P>
+          query: ExtractFromRelics<RelicsInput, "query">
+          body: ExtractFromRelics<RelicsInput, "body">
+          headers: ExtractFromRelics<RelicsInput, "headers">
+          response: Res
+        }
+      }
     }
   >
   post(path: string, relicsOrHandler: any, handler?: any, options?: RouteOptions): any {
@@ -413,38 +415,38 @@ export class Router<
   put<Path extends string, Res = Response>(
     path: Path,
     handler: Handler<E, ParamsObject<Path>, {}, Res>,
-    options?: RouteOptions,
+    options?: RouteOptions
   ): Router<
     E,
     Routes & {
       [P in Path]: {
         PUT: {
-          params: ParamsObject<P>;
-          query: never;
-          body: never;
-          headers: never;
-          response: Res;
-        };
-      };
+          params: ParamsObject<P>
+          query: never
+          body: never
+          headers: never
+          response: Res
+        }
+      }
     }
   >
   put<Path extends string, RelicsInput extends RelicInput, Res = Response>(
     path: Path,
     relics: RelicsInput,
     handler: Handler<E, ParamsObject<Path>, RelicContext<RelicsInput>, Res>,
-    options?: RouteOptions,
+    options?: RouteOptions
   ): Router<
     E,
     Routes & {
       [P in Path]: {
         PUT: {
-          params: ParamsObject<P>;
-          query: ExtractFromRelics<RelicsInput, "query">;
-          body: ExtractFromRelics<RelicsInput, "body">;
-          headers: ExtractFromRelics<RelicsInput, "headers">;
-          response: Res;
-        };
-      };
+          params: ParamsObject<P>
+          query: ExtractFromRelics<RelicsInput, "query">
+          body: ExtractFromRelics<RelicsInput, "body">
+          headers: ExtractFromRelics<RelicsInput, "headers">
+          response: Res
+        }
+      }
     }
   >
   put(path: string, relicsOrHandler: any, handler?: any, options?: RouteOptions): any {
@@ -454,38 +456,38 @@ export class Router<
   delete<Path extends string, Res = Response>(
     path: Path,
     handler: Handler<E, ParamsObject<Path>, {}, Res>,
-    options?: RouteOptions,
+    options?: RouteOptions
   ): Router<
     E,
     Routes & {
       [P in Path]: {
         DELETE: {
-          params: ParamsObject<P>;
-          query: never;
-          body: never;
-          headers: never;
-          response: Res;
-        };
-      };
+          params: ParamsObject<P>
+          query: never
+          body: never
+          headers: never
+          response: Res
+        }
+      }
     }
   >
   delete<Path extends string, RelicsInput extends RelicInput, Res = Response>(
     path: Path,
     relics: RelicsInput,
     handler: Handler<E, ParamsObject<Path>, RelicContext<RelicsInput>, Res>,
-    options?: RouteOptions,
+    options?: RouteOptions
   ): Router<
     E,
     Routes & {
       [P in Path]: {
         DELETE: {
-          params: ParamsObject<P>;
-          query: ExtractFromRelics<RelicsInput, "query">;
-          body: ExtractFromRelics<RelicsInput, "body">;
-          headers: ExtractFromRelics<RelicsInput, "headers">;
-          response: Res;
-        };
-      };
+          params: ParamsObject<P>
+          query: ExtractFromRelics<RelicsInput, "query">
+          body: ExtractFromRelics<RelicsInput, "body">
+          headers: ExtractFromRelics<RelicsInput, "headers">
+          response: Res
+        }
+      }
     }
   >
   delete(path: string, relicsOrHandler: any, handler?: any, options?: RouteOptions): any {
@@ -495,38 +497,38 @@ export class Router<
   patch<Path extends string, Res = Response>(
     path: Path,
     handler: Handler<E, ParamsObject<Path>, {}, Res>,
-    options?: RouteOptions,
+    options?: RouteOptions
   ): Router<
     E,
     Routes & {
       [P in Path]: {
         PATCH: {
-          params: ParamsObject<P>;
-          query: never;
-          body: never;
-          headers: never;
-          response: Res;
-        };
-      };
+          params: ParamsObject<P>
+          query: never
+          body: never
+          headers: never
+          response: Res
+        }
+      }
     }
   >
   patch<Path extends string, RelicsInput extends RelicInput, Res = Response>(
     path: Path,
     relics: RelicsInput,
     handler: Handler<E, ParamsObject<Path>, RelicContext<RelicsInput>, Res>,
-    options?: RouteOptions,
+    options?: RouteOptions
   ): Router<
     E,
     Routes & {
       [P in Path]: {
         PATCH: {
-          params: ParamsObject<P>;
-          query: ExtractFromRelics<RelicsInput, "query">;
-          body: ExtractFromRelics<RelicsInput, "body">;
-          headers: ExtractFromRelics<RelicsInput, "headers">;
-          response: Res;
-        };
-      };
+          params: ParamsObject<P>
+          query: ExtractFromRelics<RelicsInput, "query">
+          body: ExtractFromRelics<RelicsInput, "body">
+          headers: ExtractFromRelics<RelicsInput, "headers">
+          response: Res
+        }
+      }
     }
   >
   patch(path: string, relicsOrHandler: any, handler?: any, options?: RouteOptions): any {
@@ -542,7 +544,7 @@ export class Router<
     path: Path,
     relicsOrHandler: any,
     handler?: any,
-    options?: RouteOptions,
+    options?: RouteOptions
   ): any {
     let actualHandler: any
     let relicsList: AnyRelic[] = []
@@ -598,18 +600,16 @@ export class Router<
   route<Prefix extends string, SubRoutes extends Record<string, Record<string, RouteRecord>>>(
     path: Prefix,
     subRouter: Router<any, SubRoutes>
-  ): Router<
-    E,
-    Routes & PrefixRoutes<Prefix, SubRoutes>
-  >
-  route<Prefix extends string, RelicsInput extends RelicInput, SubRoutes extends Record<string, Record<string, RouteRecord>>>(
+  ): Router<E, Routes & PrefixRoutes<Prefix, SubRoutes>>
+  route<
+    Prefix extends string,
+    RelicsInput extends RelicInput,
+    SubRoutes extends Record<string, Record<string, RouteRecord>>,
+  >(
     path: Prefix,
     relics: RelicsInput,
     subRouter: Router<any, SubRoutes>
-  ): Router<
-    E,
-    Routes & PrefixRoutes<Prefix, SubRoutes, RelicsInput>
-  >
+  ): Router<E, Routes & PrefixRoutes<Prefix, SubRoutes, RelicsInput>>
   route(path: string, relicsOrRouter: any, maybeRouter?: any): any {
     const hasRelics = maybeRouter !== undefined
     const prefix = path.endsWith("/") ? path.slice(0, -1) : path
@@ -620,7 +620,9 @@ export class Router<
       const group = normalizeRelics(relicsOrRouter)
       const errors = validateRelicChain(group.relics, path)
       if (errors.length > 0) {
-        throw new Error(`TomoeJS: Invalid relic configuration during route mount:\n${errors.join("\n")}`)
+        throw new Error(
+          `TomoeJS: Invalid relic configuration during route mount:\n${errors.join("\n")}`
+        )
       }
 
       wrappedRoutes = subRouter._routes.map((route: any) => {
@@ -638,9 +640,10 @@ export class Router<
     }
 
     for (const mw of subRouter._middlewares) {
-      const fullPath = mw.path === "*" || mw.path === "/*"
-        ? `${prefix}/*`
-        : `${prefix}${mw.path === "/" ? "" : mw.path}`
+      const fullPath =
+        mw.path === "*" || mw.path === "/*"
+          ? `${prefix}/*`
+          : `${prefix}${mw.path === "/" ? "" : mw.path}`
       this.use(fullPath, mw.handler)
     }
 
@@ -669,7 +672,7 @@ export class Router<
   scope<Ctx extends Record<string, any>>(
     path: string,
     input: RelicInput<Ctx>,
-    builder: (r: ScopedRouter<Ctx>) => void,
+    builder: (r: ScopedRouter<Ctx>) => void
   ): this {
     const group = normalizeRelics(input)
 
@@ -702,7 +705,13 @@ export class Router<
 
   // Internal
 
-  _registerRoute(method: HTTPMethod, path: string, handler: Handler, relics: AnyRelic[] = [], options?: RouteOptions | undefined): void {
+  _registerRoute(
+    method: HTTPMethod,
+    path: string,
+    handler: Handler,
+    relics: AnyRelic[] = [],
+    options?: RouteOptions | undefined
+  ): void {
     this.#routes.push({ method, path, handler, relics, options })
   }
 
@@ -729,7 +738,7 @@ export class Router<
         this.#chainCache.set(signature, runner)
       }
 
-      const optimizedHandler = (c: Context) => runner!(c, route.handler)
+      const optimizedHandler = (c: Context) => runner?.(c, route.handler)
       this.#tree.insert(route.method, route.path, optimizedHandler)
     }
 
@@ -778,11 +787,9 @@ export class Router<
         if (m.path === "*" || m.path === "/*") return true
         const prefix = m.path.replace(/\*$/, "")
         const cleanPrefix = prefix.endsWith("/") && prefix !== "/" ? prefix.slice(0, -1) : prefix
-        const cleanRoute = routePath.endsWith("/") && routePath !== "/" ? routePath.slice(0, -1) : routePath
-        return (
-          cleanRoute === cleanPrefix ||
-          cleanRoute.startsWith(`${cleanPrefix}/`)
-        )
+        const cleanRoute =
+          routePath.endsWith("/") && routePath !== "/" ? routePath.slice(0, -1) : routePath
+        return cleanRoute === cleanPrefix || cleanRoute.startsWith(`${cleanPrefix}/`)
       })
       .map((m) => m.handler)
   }
@@ -806,6 +813,10 @@ export class Router<
 
   // Debug
 
-  getRoutes() { return this.#tree.getRoutes() }
-  getStats()  { return this.#tree.getStats() }
+  getRoutes() {
+    return this.#tree.getRoutes()
+  }
+  getStats() {
+    return this.#tree.getStats()
+  }
 }

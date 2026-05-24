@@ -8,9 +8,7 @@
  *  - Handlers for different HTTP Methods (e.g. GET, POST, PUT, DELETE)
  */
 
-export type InternalHandler<E = any, P = any> = (
-  c: any,
-) => Response | Promise<Response>;
+export type InternalHandler<E = any, P = any> = (c: any) => Response | Promise<Response>
 
 // RadixNode class
 export class RadixNode {
@@ -19,7 +17,7 @@ export class RadixNode {
    *
    * e.g. "anime", ":heroName", "*"
    */
-  segment: string;
+  segment: string
 
   /**
    * HTTP method handlers at this node
@@ -28,14 +26,14 @@ export class RadixNode {
    *
    * Null if this is intermediate node (not a route endpoint)
    */
-  handlers: Map<string, InternalHandler> | null;
+  handlers: Map<string, InternalHandler> | null
 
   /**
    * Static children (exact matches)
    * Key: segment string ("isekai", "heroes")
    * value: child node (RadixNode)
    */
-  children: Map<string, RadixNode>;
+  children: Map<string, RadixNode>
 
   /**
    * Paramter child (matches any segment and captures value)
@@ -44,7 +42,7 @@ export class RadixNode {
    * Only one param child allowed per node (precedence rule)
    */
 
-  paramChild: RadixNode | null;
+  paramChild: RadixNode | null
 
   /**
    * Wildcard child (matches remaining path)
@@ -54,7 +52,7 @@ export class RadixNode {
    * Only one wildcard child allowed per node (precedence rule)
    */
 
-  wildcardChild: RadixNode | null;
+  wildcardChild: RadixNode | null
 
   /**
    * Parameter name (if this node is paran node)
@@ -62,23 +60,23 @@ export class RadixNode {
    *
    * Null if this is not a param node
    */
-  paramName: string | null;
+  paramName: string | null
 
   /**
    * Cache: Number of static children
    *
    * Optimization: avoids calling map.size checks in hot path
    */
-  #childrenCount: number;
+  #childrenCount: number
 
   constructor(segment = "") {
-    this.segment = segment;
-    this.handlers = null;
-    this.children = new Map();
-    this.paramChild = null;
-    this.wildcardChild = null;
-    this.paramName = null;
-    this.#childrenCount = 0;
+    this.segment = segment
+    this.handlers = null
+    this.children = new Map()
+    this.paramChild = null
+    this.wildcardChild = null
+    this.paramName = null
+    this.#childrenCount = 0
   }
 
   /**
@@ -89,8 +87,8 @@ export class RadixNode {
    */
 
   addChild(segement: string, node: RadixNode) {
-    this.children.set(segement, node);
-    this.#childrenCount++;
+    this.children.set(segement, node)
+    this.#childrenCount++
   }
 
   /**
@@ -101,14 +99,14 @@ export class RadixNode {
    */
 
   getChild(segment: string): RadixNode | undefined {
-    return this.children.get(segment);
+    return this.children.get(segment)
   }
 
   /**
    * Check if node has static children
    */
   hasChildren(): boolean {
-    return this.#childrenCount > 0;
+    return this.#childrenCount > 0
   }
 
   /**
@@ -122,9 +120,9 @@ export class RadixNode {
 
   addHandler(method: string, handler: InternalHandler) {
     if (!this.handlers) {
-      this.handlers = new Map();
+      this.handlers = new Map()
     }
-    this.handlers.set(method, handler);
+    this.handlers.set(method, handler)
   }
 
   /**
@@ -135,7 +133,7 @@ export class RadixNode {
    */
 
   getHandler(method: string): InternalHandler | undefined {
-    return this.handlers?.get(method);
+    return this.handlers?.get(method)
   }
 
   /**
@@ -145,6 +143,6 @@ export class RadixNode {
    */
 
   hasHandler(method: string): boolean {
-    return this.handlers?.has(method) ?? false;
+    return this.handlers?.has(method) ?? false
   }
 }

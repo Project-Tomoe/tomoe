@@ -1,4 +1,4 @@
-import { Tomoe, relic, err, Unauthorized, createServer } from "tomoejs"
+import { Tomoe, Unauthorized, createServer, err, relic } from "tomoejs"
 
 const app = new Tomoe()
 
@@ -42,13 +42,13 @@ app.get("/protected", (ctx) => {
 
 app.compile()
 
-const port = parseInt(process.env.PORT || "3000", 10)
+const port = Number.parseInt(process.env.PORT || "3000", 10)
 
 if (typeof Bun !== "undefined") {
   // Native Bun.serve entry path for extreme Bun speed
   Bun.serve({
     port,
-    fetch: (req) => app.fetch(req)
+    fetch: (req) => app.fetch(req),
   })
   console.log(`TomoeJS native Bun server listening on port ${port}`)
 } else {

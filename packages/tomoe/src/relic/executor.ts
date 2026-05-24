@@ -1,16 +1,16 @@
-import type { AnyRelic, ProvidingRelic } from "./relic";
-import { isErr } from "./result";
-import { HttpError } from "./error";
+import { HttpError } from "./error"
+import type { AnyRelic, ProvidingRelic } from "./relic"
+import { isErr } from "./result"
 
 /**
  * Minimal context the executor needs from the request.
  * Decoupled from the full Context class so executor stays testable.
  */
 export interface ExecutorCtx {
-  req: Request;
-  _setRelic(id: symbol, value: any): void;
-  _setRelicByName(name: string, value: any): void;
-  _getRelic(id: symbol): any;
+  req: Request
+  _setRelic(id: symbol, value: any): void
+  _setRelicByName(name: string, value: any): void
+  _getRelic(id: symbol): any
 }
 
 /**
@@ -28,60 +28,60 @@ export async function executeRelics(
 ): Promise<HttpError | null> {
   for (const rel of relics) {
     // If this relic has already run successfully on this request context, skip it
-    const cached = ctx._getRelic(rel._id);
+    const cached = ctx._getRelic(rel._id)
     if (cached !== undefined) {
-      continue;
+      continue
     }
 
     // Build the use() resolver for this relic
     const use = <T>(targetRelic: ProvidingRelic<any, T>): T => {
-      const value = ctx._getRelic(targetRelic._id);
+      const value = ctx._getRelic(targetRelic._id)
 
       if (value === undefined) {
         throw new Error(
           `Relic dependency error: "${rel.name || "anonymous"}" called use() on relic ` +
-          `"${targetRelic.name || "anonymous"}" but no relic in the chain provides it. ` +
-          `Make sure that relic appears before "${rel.name || "anonymous"}" in the chain.`
-        );
+            `"${targetRelic.name || "anonymous"}" but no relic in the chain provides it. ` +
+            `Make sure that relic appears before "${rel.name || "anonymous"}" in the chain.`
+        )
       }
 
-      return value as T;
-    };
+      return value as T
+    }
 
     try {
-      const result = await rel.fn(ctx as any, use);
+      const result = await rel.fn(ctx as any, use)
 
       // Guard relics return void on success — cache success flag to prevent double execution
       if (rel._kind === "guard") {
         if (isErr(result)) {
-          return result.error;
+          return result.error
         }
-        ctx._setRelic(rel._id, true);
-        continue;
+        ctx._setRelic(rel._id, true)
+        continue
       }
 
       // Providing relic returned an error
       if (isErr(result)) {
-        return result.error;
+        return result.error
       }
 
       // Providing relic succeeded — store value by relic id and name
-      ctx._setRelic(rel._id, result);
+      ctx._setRelic(rel._id, result)
       if (rel.name) {
-        ctx._setRelicByName(rel.name, result);
+        ctx._setRelicByName(rel.name, result)
       }
     } catch (e) {
       // If a relic throws an HttpError directly, treat it as err()
       if (e instanceof HttpError) {
-        return e;
+        return e
       }
 
       // Unexpected error — rethrow so the router's error handler catches it
-      throw e;
+      throw e
     }
   }
 
-  return null;
+  return null
 }
 
 /**
@@ -90,36 +90,30 @@ export async function executeRelics(
  *
  * Returns array of error strings — empty means valid.
  */
-export function validateRelicChain(
-  relics: AnyRelic[],
-  scopePath: string
-): string[] {
-  const errors: string[] = [];
-  const provided = new Set<symbol>();
-  const names = new Set<string>();
+export function validateRelicChain(relics: AnyRelic[], scopePath: string): string[] {
+  const errors: string[] = []
+  const provided = new Set<symbol>()
+  const names = new Set<string>()
 
   for (const rel of relics) {
     if (rel._kind === "providing") {
-      const relicId = rel._id;
+      const relicId = rel._id
 
       if (provided.has(relicId)) {
-        errors.push(
-          `[${scopePath}] Relic with same identity is declared multiple times.`
-        );
+        errors.push(`[${scopePath}] Relic with same identity is declared multiple times.`)
       }
-      provided.add(relicId);
+      provided.add(relicId)
 
       if (rel.name) {
         if (names.has(rel.name)) {
           errors.push(
-            `[${scopePath}] Property name "${rel.name}" is provided by multiple relics. ` +
-            `Each name must be uniquely provided.`
-          );
+            `[${scopePath}] Property name "${rel.name}" is provided by multiple relics. Each name must be uniquely provided.`
+          )
         }
-        names.add(rel.name);
+        names.add(rel.name)
       }
     }
   }
 
-  return errors;
+  return errors
 }

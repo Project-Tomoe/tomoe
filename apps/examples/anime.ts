@@ -1,4 +1,14 @@
-import { Tomoe, relic, guard, err, Unauthorized, Forbidden, NotFound, swagger, unite } from "tomoejs"
+import {
+  Forbidden,
+  NotFound,
+  Tomoe,
+  Unauthorized,
+  err,
+  guard,
+  relic,
+  swagger,
+  unite,
+} from "tomoejs"
 import { z } from "zod"
 
 // -----------------------------------------------------------------------------
@@ -27,7 +37,7 @@ class InMemoryDb {
       genres: ["Action", "Adventure", "Fantasy", "Drama"],
       rating: 9.1,
       episodes: 64,
-      synopsis: "Two brothers search for the Philosopher's Stone to restore their bodies."
+      synopsis: "Two brothers search for the Philosopher's Stone to restore their bodies.",
     })
     this.store.set("aot", {
       id: "aot",
@@ -35,7 +45,7 @@ class InMemoryDb {
       genres: ["Action", "Drama", "Fantasy", "Mystery"],
       rating: 9.0,
       episodes: 87,
-      synopsis: "Humanity fights for survival against man-eating giants called Titans."
+      synopsis: "Humanity fights for survival against man-eating giants called Titans.",
     })
     this.store.set("hxh", {
       id: "hxh",
@@ -43,7 +53,7 @@ class InMemoryDb {
       genres: ["Action", "Adventure", "Fantasy"],
       rating: 9.0,
       episodes: 148,
-      synopsis: "Gon Freecss seeks to become a legendary Hunter and find his father."
+      synopsis: "Gon Freecss seeks to become a legendary Hunter and find his father.",
     })
     this.store.set("steins-gate", {
       id: "steins-gate",
@@ -51,7 +61,7 @@ class InMemoryDb {
       genres: ["Sci-Fi", "Thriller", "Drama"],
       rating: 8.9,
       episodes: 24,
-      synopsis: "A self-proclaimed mad scientist accidentally invents a time machine."
+      synopsis: "A self-proclaimed mad scientist accidentally invents a time machine.",
     })
   }
 
@@ -64,7 +74,10 @@ class InMemoryDb {
   }
 
   create(anime: Omit<Anime, "id">): Anime {
-    const id = anime.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
+    const id = anime.title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "")
     const newAnime = { id, ...anime }
     this.store.set(id, newAnime)
     return newAnime
@@ -90,11 +103,11 @@ const dbRelic = relic("db", async () => {
 // 2. API Key Guard: asserts client is authorized before executing mutations
 const apiKeyGuard = guard(async (ctx) => {
   const authHeader = ctx.header("authorization")
-  
+
   if (!authHeader) {
     return err(Unauthorized) // Emits 401
   }
-  
+
   const token = authHeader.replace(/^Bearer\s+/, "")
   if (token !== "tomoe-secret-key") {
     return err(Forbidden) // Emits 403
@@ -111,13 +124,13 @@ const createAnimeSchema = z.object({
   genres: z.array(z.string()).min(1, "Specify at least 1 genre"),
   rating: z.number().min(0).max(10, "Rating must be between 0 and 10"),
   episodes: z.number().int().min(1, "Episodes must be at least 1"),
-  synopsis: z.string().default("No synopsis available.")
+  synopsis: z.string().default("No synopsis available."),
 })
 
 // List Query Parameters Schema
 const listQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).default(10),
-  genre: z.string().optional()
+  genre: z.string().optional(),
 })
 
 // -----------------------------------------------------------------------------
@@ -130,7 +143,7 @@ swagger(app, {
   title: "🌸 TomoeJS Anime API Examples",
   version: "1.0.0",
   path: "/docs",
-  specPath: "/swagger.json"
+  specPath: "/swagger.json",
 })
 
 // Global logging middleware
@@ -144,7 +157,6 @@ app.use("*", async (ctx, next) => {
 
 // --- PUBLIC ROUTE PREFIX ---
 app.scope("/api", dbRelic, (r) => {
-  
   // 1. Get List (with Zod query validation)
   r.get("/anime", relic.query(listQuerySchema), (ctx) => {
     // Both 'ctx.db' and 'ctx.query' are fully typed and contract-injected!
@@ -152,9 +164,7 @@ app.scope("/api", dbRelic, (r) => {
     let results = ctx.db.list()
 
     if (genre) {
-      results = results.filter(a => 
-        a.genres.some(g => g.toLowerCase() === genre.toLowerCase())
-      )
+      results = results.filter((a) => a.genres.some((g) => g.toLowerCase() === genre.toLowerCase()))
     }
 
     return ctx.json(results.slice(0, limit))
@@ -178,31 +188,39 @@ app.scope("/api", dbRelic, (r) => {
 const authenticatedMutation = unite(dbRelic, apiKeyGuard)
 
 app.scope("/api", authenticatedMutation, (r) => {
-  
   // Custom scope-level error overrides
   r.onError(401, (ctx) => {
-    return ctx.json({ 
-      error: "Authentication Required", 
-      message: "Please pass 'Authorization: Bearer tomoe-secret-key' header." 
-    }, { status: 401 })
+    return ctx.json(
+      {
+        error: "Authentication Required",
+        message: "Please pass 'Authorization: Bearer tomoe-secret-key' header.",
+      },
+      { status: 401 }
+    )
   })
 
   r.onError(403, (ctx) => {
-    return ctx.json({ 
-      error: "Access Forbidden", 
-      message: "The provided Bearer token is invalid." 
-    }, { status: 403 })
+    return ctx.json(
+      {
+        error: "Access Forbidden",
+        message: "The provided Bearer token is invalid.",
+      },
+      { status: 403 }
+    )
   })
 
   // 3. Create Anime (with Zod body validation & authorization guard)
   r.post("/anime", relic.body(createAnimeSchema), (ctx) => {
     // 'ctx.body' is dynamically typed and guaranteed to be valid!
     const newAnime = ctx.db.create(ctx.body)
-    return ctx.json({
-      success: true,
-      message: "Anime cataloged successfully!",
-      data: newAnime
-    }, { status: 201 })
+    return ctx.json(
+      {
+        success: true,
+        message: "Anime cataloged successfully!",
+        data: newAnime,
+      },
+      { status: 201 }
+    )
   })
 
   // 4. Delete Anime (requires authorization guard)
@@ -216,7 +234,7 @@ app.scope("/api", authenticatedMutation, (r) => {
 
     return ctx.json({
       success: true,
-      message: `Anime '${id}' has been permanently deleted.`
+      message: `Anime '${id}' has been permanently deleted.`,
     })
   })
 })
@@ -225,7 +243,7 @@ app.scope("/api", authenticatedMutation, (r) => {
 app.compile()
 
 const PORT = 3000
-console.log(`\n🌸 TomoeJS Premium Anime API example running!`)
+console.log("\n🌸 TomoeJS Premium Anime API example running!")
 console.log(`👉 Swagger UI Docs: http://localhost:${PORT}/docs`)
 console.log(`👉 Public GET List: http://localhost:${PORT}/api/anime`)
 console.log(`👉 Auth GET Secret: http://localhost:${PORT}/api/anime/fmab\n`)

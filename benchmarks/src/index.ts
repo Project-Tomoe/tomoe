@@ -1,8 +1,8 @@
-import { spawn, ChildProcess } from "child_process"
-import { createConnection } from "net"
+import { type ChildProcess, spawn } from "node:child_process"
+import * as fs from "node:fs"
+import { createConnection } from "node:net"
+import * as path from "node:path"
 import autocannon from "autocannon"
-import * as fs from "fs"
-import * as path from "path"
 
 const PORT = 4000
 const DURATION_SECS = 5
@@ -36,7 +36,7 @@ function getFrameworkVersion(packageName: string): string {
   const searchPaths = [
     path.join(process.cwd(), "node_modules", packageName, "package.json"),
     path.join(process.cwd(), "..", "node_modules", packageName, "package.json"),
-    path.join(process.cwd(), "..", "packages", "tomoe", "package.json") // fallback for tomoejs
+    path.join(process.cwd(), "..", "packages", "tomoe", "package.json"), // fallback for tomoejs
   ]
 
   for (const p of searchPaths) {
@@ -58,7 +58,7 @@ async function clearPort(port: number): Promise<void> {
     console.log(`🔌 Clearing any active socket listeners on port ${port}...`)
     const killer = spawn("npx", ["kill-port", port.toString()], {
       shell: true,
-      stdio: "ignore"
+      stdio: "ignore",
     })
     killer.on("exit", () => {
       // Pause to let the OS release port handles from TIME_WAIT state
@@ -77,7 +77,7 @@ async function killProcessTree(child: ChildProcess): Promise<void> {
 
     if (process.platform === "win32") {
       const killer = spawn("taskkill", ["/pid", child.pid.toString(), "/f", "/t"], {
-        stdio: "ignore"
+        stdio: "ignore",
       })
       killer.on("exit", () => {
         resolve()
@@ -113,7 +113,10 @@ async function waitPort(port: number, timeoutMs = 5000): Promise<void> {
 }
 
 // Run autocannon for a given URL and configuration
-async function runAutocannon(url: string, headers: Record<string, string> = {}): Promise<{
+async function runAutocannon(
+  url: string,
+  headers: Record<string, string> = {}
+): Promise<{
   requestsPerSec: number
   latencyAvgMs: number
   p99Ms: number
@@ -150,9 +153,13 @@ async function runBenchmark() {
   const elysiaVer = getFrameworkVersion("elysia")
   const expressVer = getFrameworkVersion("express")
 
-  console.log(`🌸 TomoeJS Verified Benchmark Suite`)
-  console.log(`Environment: Node ${process.version}, Bun ${isBunAvailable ? "Available" : "Not Available"}`)
-  console.log(`Versions: TomoeJS v${tomoeVer}, Hono v${honoVer}, Elysia v${elysiaVer}, Express v${expressVer}`)
+  console.log("🌸 TomoeJS Verified Benchmark Suite")
+  console.log(
+    `Environment: Node ${process.version}, Bun ${isBunAvailable ? "Available" : "Not Available"}`
+  )
+  console.log(
+    `Versions: TomoeJS v${tomoeVer}, Hono v${honoVer}, Elysia v${elysiaVer}, Express v${expressVer}`
+  )
   console.log(`Config: ${CONNECTIONS} connections for ${DURATION_SECS} seconds per route`)
   console.log("--------------------------------------------------------------------------------\n")
 
@@ -227,35 +234,42 @@ async function runBenchmark() {
   }
 
   // Generate markdown output report
-  let report = `# 🌸 TomoeJS Performance Benchmark Report\n\n`
-  report += `This report lists the comparative performance benchmark results for **TomoeJS**, **Hono**, **Elysia**, and **Express**.\n\n`
-  report += `## Benchmark Configurations\n`
-  report += `* **Load Generator**: Autocannon\n`
+  let report = "# 🌸 TomoeJS Performance Benchmark Report\n\n"
+  report +=
+    "This report lists the comparative performance benchmark results for **TomoeJS**, **Hono**, **Elysia**, and **Express**.\n\n"
+  report += "## Benchmark Configurations\n"
+  report += "* **Load Generator**: Autocannon\n"
   report += `* **Concurrency**: ${CONNECTIONS} concurrent connections\n`
   report += `* **Duration**: ${DURATION_SECS} seconds per route scenario\n`
   report += `* **Node version**: ${process.version}\n`
   if (isBunAvailable) {
-    report += `* **Bun version**: 1.3.3 (or equivalent local version)\n`
+    report += "* **Bun version**: 1.3.3 (or equivalent local version)\n"
   }
-  report += `\n`
-  report += `### Exact Framework Versions Tested\n`
+  report += "\n"
+  report += "### Exact Framework Versions Tested\n"
   report += `* **TomoeJS**: \`v${tomoeVer}\`\n`
   report += `* **Hono**: \`v${honoVer}\`\n`
   report += `* **Elysia**: \`v${elysiaVer}\`\n`
   report += `* **Express**: \`v${expressVer}\`\n`
-  report += `\n---\n\n`
+  report += "\n---\n\n"
 
   // Scenario lists
   const scenarios = [
     { title: "⚡ Scenario 1: Static JSON Payload (`/json`)", key: "Static JSON (/json)" },
-    { title: "🧬 Scenario 2: Radix Dynamic Routing (`/user/:id/posts/:postId`)", key: "Dynamic Params (/user/:id/posts/:postId)" },
-    { title: "🧅 Scenario 3: Pre-Compiled Middleware Onion Pipeline (`/protected`)", key: "Middleware Pipeline (/protected)" },
+    {
+      title: "🧬 Scenario 2: Radix Dynamic Routing (`/user/:id/posts/:postId`)",
+      key: "Dynamic Params (/user/:id/posts/:postId)",
+    },
+    {
+      title: "🧅 Scenario 3: Pre-Compiled Middleware Onion Pipeline (`/protected`)",
+      key: "Middleware Pipeline (/protected)",
+    },
   ]
 
   for (const scenario of scenarios) {
     report += `### ${scenario.title}\n\n`
-    report += `| Framework | Requests / Sec (Throughput) | Avg Latency (ms) | P99 Latency (ms) |\n`
-    report += `|---|---|---|---|\n`
+    report += "| Framework | Requests / Sec (Throughput) | Avg Latency (ms) | P99 Latency (ms) |\n"
+    report += "|---|---|---|---|\n"
 
     // Sort by requestsPerSec descending to see winners first
     const sortedTargets = Object.entries(allResults)
@@ -269,13 +283,16 @@ async function runBenchmark() {
     for (const t of sortedTargets) {
       report += `| **${t.targetName}** | ${t.requestsPerSec?.toLocaleString()} req/s | ${t.latencyAvgMs} ms | ${t.p99Ms} ms |\n`
     }
-    report += `\n`
+    report += "\n"
   }
 
-  report += `## Summary of Findings\n`
-  report += `1. **TomoeJS (Bun)** executes with extreme high-throughput, placing it side-by-side or ahead of frameworks like Hono and Elysia.\n`
-  report += `2. **TomoeJS (Node)** runs significantly faster than legacy frameworks like Express due to its lightweight core and absence of dynamic middleware pipeline scans.\n`
-  report += `3. **Pre-compiled Onion Execution** saves CPU cycles, resulting in better latency profiles on highly composed routes.\n\n`
+  report += "## Summary of Findings\n"
+  report +=
+    "1. **TomoeJS (Bun)** executes with extreme high-throughput, placing it side-by-side or ahead of frameworks like Hono and Elysia.\n"
+  report +=
+    "2. **TomoeJS (Node)** runs significantly faster than legacy frameworks like Express due to its lightweight core and absence of dynamic middleware pipeline scans.\n"
+  report +=
+    "3. **Pre-compiled Onion Execution** saves CPU cycles, resulting in better latency profiles on highly composed routes.\n\n"
   report += `*Generated automatically on ${new Date().toISOString().split("T")[0]}*`
 
   const reportPath = path.join(process.cwd(), "BENCHMARK.md")

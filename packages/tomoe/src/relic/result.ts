@@ -1,6 +1,6 @@
 /**
  * Result - Lightweight error signaling for Relics
- * 
+ *
  * Only errors need explicit marking. Happy path just returns the value.
  *
  * @example
@@ -11,13 +11,13 @@
  * })
  */
 
-import {HttpError} from "./error";
+import type { HttpError } from "./error"
 
-const ERR_BRAND = Symbol("tomoe.err");
+const ERR_BRAND = Symbol("tomoe.err")
 
 export interface Err {
-    readonly [ERR_BRAND]: true 
-    readonly error: HttpError
+  readonly [ERR_BRAND]: true
+  readonly error: HttpError
 }
 
 /**
@@ -31,7 +31,6 @@ export interface Err {
 export function err(error: HttpError): Err {
   return { [ERR_BRAND]: true, error }
 }
-
 
 /**
  * Type guard — check if a relic return value is an error.

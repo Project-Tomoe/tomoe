@@ -31,5 +31,15 @@
       "semicolons": "asNeeded",
       "trailingCommas": "es5"
     }
+  },
+  "files": {
+    "ignore": [
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/.turbo/**",
+      "**/.changeset/**",
+      "pnpm-lock.yaml",
+      "pnpm-workspace.yaml"
+    ]
   }
 }

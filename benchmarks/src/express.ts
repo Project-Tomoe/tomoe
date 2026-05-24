@@ -25,7 +25,7 @@ const corsMiddleware: express.RequestHandler = (req, res, next) => {
 }
 
 const authMiddleware: express.RequestHandler = (req, res, next) => {
-  const auth = req.headers["authorization"]
+  const auth = req.headers.authorization
   if (!auth) {
     res.status(401).json({ error: "Unauthorized" })
     return
@@ -33,17 +33,11 @@ const authMiddleware: express.RequestHandler = (req, res, next) => {
   next()
 }
 
-app.get(
-  "/protected",
-  requestIdMiddleware,
-  corsMiddleware,
-  authMiddleware,
-  (req, res) => {
-    res.json({ secret: "express-confidential-data" })
-  }
-)
+app.get("/protected", requestIdMiddleware, corsMiddleware, authMiddleware, (req, res) => {
+  res.json({ secret: "express-confidential-data" })
+})
 
-const port = parseInt(process.env.PORT || "3000", 10)
+const port = Number.parseInt(process.env.PORT || "3000", 10)
 app.listen(port, () => {
   console.log(`Express bench server listening on port ${port}`)
 })
