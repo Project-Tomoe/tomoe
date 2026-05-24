@@ -6,7 +6,29 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { relic, guard } from "../../../src/relic/relic";
 import { unite } from "../../../src/relic/unite";
 import { err, isErr } from "../../../src/relic/result";
-import { HttpError, httpError, Unauthorized, Forbidden } from "../../../src/relic/error";
+import {
+  HttpError,
+  httpError,
+  BadRequest,
+  Unauthorized,
+  PaymentRequired,
+  Forbidden,
+  NotFound,
+  MethodNotAllowed,
+  NotAcceptable,
+  RequestTimeout,
+  Conflict,
+  Gone,
+  PayloadTooLarge,
+  UnsupportedMediaType,
+  UnprocessableEntity,
+  TooManyRequests,
+  ServerError,
+  NotImplemented,
+  BadGateway,
+  ServiceUnavailable,
+  GatewayTimeout,
+} from "../../../src/relic/error";
 import { executeRelics } from "../../../src/relic/executor";
 import { Router } from "../../../src/router/router";
 import { Context } from "../../../src/context";
@@ -52,6 +74,28 @@ describe("HttpError", () => {
     expect(res.status).toBe(401);
     const body = await res.json();
     expect(body).toEqual({ error: "Unauthorized" });
+  });
+
+  it("should have all common pre-built HTTP error constants with correct status codes", () => {
+    expect(BadRequest.status).toBe(400);
+    expect(Unauthorized.status).toBe(401);
+    expect(PaymentRequired.status).toBe(402);
+    expect(Forbidden.status).toBe(403);
+    expect(NotFound.status).toBe(404);
+    expect(MethodNotAllowed.status).toBe(405);
+    expect(NotAcceptable.status).toBe(406);
+    expect(RequestTimeout.status).toBe(408);
+    expect(Conflict.status).toBe(409);
+    expect(Gone.status).toBe(410);
+    expect(PayloadTooLarge.status).toBe(413);
+    expect(UnsupportedMediaType.status).toBe(415);
+    expect(UnprocessableEntity.status).toBe(422);
+    expect(TooManyRequests.status).toBe(429);
+    expect(ServerError.status).toBe(500);
+    expect(NotImplemented.status).toBe(501);
+    expect(BadGateway.status).toBe(502);
+    expect(ServiceUnavailable.status).toBe(503);
+    expect(GatewayTimeout.status).toBe(504);
   });
 });
 

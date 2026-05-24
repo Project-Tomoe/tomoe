@@ -54,7 +54,29 @@ export { unite } from "./relic/unite"
 export type { RelicGroup, GroupContext } from "./relic/unite"
 
 // Error primitives
-export { HttpError, httpError, Unauthorized, Forbidden, NotFound, BadRequest, Conflict, ServerError } from "./relic/error"
+export {
+  HttpError,
+  httpError,
+  BadRequest,
+  Unauthorized,
+  PaymentRequired,
+  Forbidden,
+  NotFound,
+  MethodNotAllowed,
+  NotAcceptable,
+  RequestTimeout,
+  Conflict,
+  Gone,
+  PayloadTooLarge,
+  UnsupportedMediaType,
+  UnprocessableEntity,
+  TooManyRequests,
+  ServerError,
+  NotImplemented,
+  BadGateway,
+  ServiceUnavailable,
+  GatewayTimeout,
+} from "./relic/error"
 
 // Result signaling
 export { err, isErr } from "./relic/result"
