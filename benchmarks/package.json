@@ -1,0 +1,24 @@
+{
+  "name": "benchmarks",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "autocannon": "^7.15.0",
+    "elysia": "^1.2.2",
+    "express": "^4.21.2",
+    "hono": "^4.7.2",
+    "@hono/node-server": "^1.13.7",
+    "tomoejs": "workspace:*",
+    "tsx": "^4.19.2"
+  },
+  "devDependencies": {
+    "@types/autocannon": "^7.12.6",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.18.0",
+    "typescript": "^5.9.2"
+  }
+}
