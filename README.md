@@ -182,6 +182,29 @@ bun run index.ts
 
 ---
 
+## 🌸 Flagship Example Project
+
+To see a complete, fully featured blueprint built with TomoeJS, check out our **[Anime API Example](file:///C:/Users/saif/.gemini/antigravity/scratch/tomoe/apps/examples/anime.ts)** in the `apps/examples` directory.
+
+It demonstrates a comprehensive, real-world setup covering:
+* 🛡️ **Guards & Relics**: Injection of shared database contexts (`dbRelic`) and API authorization guards (`apiKeyGuard`) composed dynamically via `unite(...)`.
+* 📦 **Zod Input Schema Validation**: Auto-validating and typing request bodies (`relic.body`) and query limits (`relic.query`) at the route gateway.
+* 🧅 **Scope-level Custom Error Handlers**: Intercepting 401 and 403 errors originating from guards or handlers to output beautifully formatted, custom JSON error payloads.
+* 📝 **Interactive Swagger UI Docs**: Serving auto-generated OpenAPI schemas on `/swagger.json` and interactive Swagger panels on `/docs`.
+
+To start the example on your machine:
+```bash
+cd apps/examples
+
+# Run natively on Bun (Recommended)
+pnpm start
+
+# Run on standard Node.js
+pnpm run start:node
+```
+
+---
+
 ## 📖 Complete Guide & API Reference
 
 ### 1. Radix Tree Routing & Parameters
