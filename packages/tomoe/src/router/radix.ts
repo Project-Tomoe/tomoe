@@ -145,59 +145,67 @@ export class RadixTree {
     }
 
     const segments = this.#splitPath(path);
-    const params: Record<string, string> = {};
+    return this.#matchSegments(this.#root, segments, 0, methodAsUpper);
+  }
 
-    let node = this.#root;
-
-    for (let i = 0; i < segments.length; i++) {
-      const segment = segments[i];
-      const remainingSegments = segments.length - i;
-
-      if (node.hasChildren()) {
-        const child = node.getChild(segment as string);
-
-        if (child) {
-          node = child;
-          continue;
-        }
+  #matchSegments(
+    node: RadixNode,
+    segments: string[],
+    index: number,
+    method: string,
+  ): MatchResult | null {
+    if (index === segments.length) {
+      const handler = node.getHandler(method);
+      if (handler) {
+        return { handler, params: {} };
       }
-
-      if (node.paramChild && remainingSegments === 1) {
-        const paramName = node.paramChild.paramName;
-        if (paramName) {
-          params[paramName] = segment as string;
-          node = node.paramChild;
-          continue;
-        }
-      }
-
+      // If we are at the end of segments, but there is a wildcard child,
+      // we can match it with an empty string remainder.
       if (node.wildcardChild) {
-        const remainingPath = segments.slice(i).join("/");
-        params["*"] = remainingPath;
-
-        node = node.wildcardChild;
-        break;
-      }
-
-      if (node.paramChild) {
-        const paramName = node.paramChild.paramName;
-        if (paramName) {
-          params[paramName] = segment as string;
-          node = node.paramChild;
-          continue;
+        const handler = node.wildcardChild.getHandler(method);
+        if (handler) {
+          return { handler, params: { "*": "" } };
         }
       }
-
       return null;
     }
 
-    const handler = node.getHandler(methodAsUpper);
+    const segment = segments[index] as string;
 
-    if (!handler) {
-      return null;
+    // Priority 1: Static Child Match
+    if (node.hasChildren()) {
+      const child = node.getChild(segment);
+      if (child) {
+        const result = this.#matchSegments(child, segments, index + 1, method);
+        if (result) return result;
+      }
     }
 
-    return { handler, params };
+    // Priority 2: Parameter Child Match
+    if (node.paramChild) {
+      const paramName = node.paramChild.paramName;
+      if (paramName) {
+        const result = this.#matchSegments(node.paramChild, segments, index + 1, method);
+        if (result) {
+          result.params[paramName] = segment;
+          return result;
+        }
+      }
+    }
+
+    // Priority 3: Wildcard Child Match
+    if (node.wildcardChild) {
+      const handler = node.wildcardChild.getHandler(method);
+      if (handler) {
+        const remainingPath = segments.slice(index).join("/");
+        return {
+          handler,
+          params: { "*": remainingPath },
+        };
+      }
+    }
+
+    return null;
   }
 
   /**
