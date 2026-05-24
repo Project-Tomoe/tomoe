@@ -3,7 +3,7 @@ import type { Router } from "./router/router";
 /**
  * Convert Zod schema AST to JSON Schema.
  */
-function zodToJsonSchema(schema: any): any {
+function zodToJsonSchema(schema: any, visited: Set<any>): any {
   if (!schema || typeof schema !== "object") return {};
 
   const def = schema._def;
@@ -25,13 +25,13 @@ function zodToJsonSchema(schema: any): any {
     case "ZodEnum":
       return { type: "string", enum: def.values };
     case "ZodOptional":
-      return zodToJsonSchema(def.innerType);
+      return schemaToJsonSchema(def.innerType, visited);
     case "ZodNullable":
-      return { ...zodToJsonSchema(def.innerType), nullable: true };
+      return { ...schemaToJsonSchema(def.innerType, visited), nullable: true };
     case "ZodArray":
       return {
         type: "array",
-        items: zodToJsonSchema(def.type),
+        items: schemaToJsonSchema(def.type, visited),
       };
     case "ZodObject": {
       const properties: any = {};
@@ -39,7 +39,7 @@ function zodToJsonSchema(schema: any): any {
       const shape = def.shape();
 
       for (const [key, value] of Object.entries(shape)) {
-        properties[key] = zodToJsonSchema(value);
+        properties[key] = schemaToJsonSchema(value, visited);
         
         let isOptional = false;
         let current = value as any;
@@ -63,13 +63,19 @@ function zodToJsonSchema(schema: any): any {
     }
     case "ZodUnion":
       return {
-        anyOf: def.options.map((opt: any) => zodToJsonSchema(opt)),
+        anyOf: def.options.map((opt: any) => schemaToJsonSchema(opt, visited)),
       };
     case "ZodEffects":
-      return zodToJsonSchema(def.schema);
+      return schemaToJsonSchema(def.schema, visited);
+    case "ZodLazy":
+      try {
+        return schemaToJsonSchema(def.getter(), visited);
+      } catch {
+        return { type: "object" };
+      }
     default:
       if (def.innerType) {
-        return zodToJsonSchema(def.innerType);
+        return schemaToJsonSchema(def.innerType, visited);
       }
       return { type: "string" };
   }
@@ -78,7 +84,7 @@ function zodToJsonSchema(schema: any): any {
 /**
  * Convert Valibot schema structure to JSON Schema.
  */
-function valibotToJsonSchema(schema: any): any {
+function valibotToJsonSchema(schema: any, visited: Set<any>): any {
   if (!schema || typeof schema !== "object") return {};
   
   const type = schema.type;
@@ -94,14 +100,14 @@ function valibotToJsonSchema(schema: any): any {
     case "array":
       return {
         type: "array",
-        items: valibotToJsonSchema(schema.item || schema.wrapped),
+        items: schemaToJsonSchema(schema.item || schema.wrapped, visited),
       };
     case "object": {
       const properties: any = {};
       const required: string[] = [];
       const entries = schema.entries || {};
       for (const [key, val] of Object.entries(entries)) {
-        properties[key] = valibotToJsonSchema(val);
+        properties[key] = schemaToJsonSchema(val, visited);
         
         let isOptional = false;
         let current = val as any;
@@ -125,10 +131,10 @@ function valibotToJsonSchema(schema: any): any {
     case "optional":
     case "nullable":
     case "nullish":
-      return valibotToJsonSchema(schema.wrapped);
+      return schemaToJsonSchema(schema.wrapped, visited);
     default:
       if (schema.wrapped) {
-        return valibotToJsonSchema(schema.wrapped);
+        return schemaToJsonSchema(schema.wrapped, visited);
       }
       return { type: "string" };
   }
@@ -137,30 +143,39 @@ function valibotToJsonSchema(schema: any): any {
 /**
  * Convert any validator schema (TypeBox, Zod, Valibot) to JSON Schema.
  */
-export function schemaToJsonSchema(schema: any): any {
+export function schemaToJsonSchema(schema: any, visited: Set<any> = new Set()): any {
   if (!schema || typeof schema !== "object") return {};
 
-  // 1. TypeBox (already formatted JSON schema)
-  if (
-    "type" in schema ||
-    "properties" in schema ||
-    Symbol.for("TypeBox.Kind") in schema
-  ) {
-    return JSON.parse(JSON.stringify(schema));
+  if (visited.has(schema)) {
+    return { type: "object", description: "Circular reference" };
   }
+  visited.add(schema);
 
-  // 2. Zod
-  if (schema._def && typeof schema._def === "object" && typeof schema._def.typeName === "string") {
-    return zodToJsonSchema(schema);
+  try {
+    // 1. TypeBox (already formatted JSON schema)
+    if (
+      "type" in schema ||
+      "properties" in schema ||
+      Symbol.for("TypeBox.Kind") in schema
+    ) {
+      return JSON.parse(JSON.stringify(schema));
+    }
+
+    // 2. Zod
+    if (schema._def && typeof schema._def === "object" && typeof schema._def.typeName === "string") {
+      return zodToJsonSchema(schema, visited);
+    }
+
+    // 3. Valibot
+    if (schema.type && (schema.entries || schema.wrapped)) {
+      return valibotToJsonSchema(schema, visited);
+    }
+
+    // Fallback
+    return { type: "object" };
+  } finally {
+    visited.delete(schema);
   }
-
-  // 3. Valibot
-  if (schema.type && (schema.entries || schema.wrapped)) {
-    return valibotToJsonSchema(schema);
-  }
-
-  // Fallback
-  return { type: "object" };
 }
 
 export interface SwaggerOptions {
@@ -333,7 +348,7 @@ export function swagger(app: Router<any, any>, options: SwaggerOptions = {}) {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${options.title || "Tomoe API Docs"}</title>
-  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.18.2/swagger-ui.css" crossorigin="anonymous" />
   <style>
     html { box-sizing: border-box; overflow: -moz-scrollbars-vertical; overflow-y: scroll; }
     *, *:before, *:after { box-sizing: inherit; }
@@ -342,7 +357,7 @@ export function swagger(app: Router<any, any>, options: SwaggerOptions = {}) {
 </head>
 <body>
   <div id="swagger-ui"></div>
-  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script src="https://unpkg.com/swagger-ui-dist@5.18.2/swagger-ui-bundle.js" crossorigin="anonymous"></script>
   <script>
     window.onload = () => {
       window.ui = SwaggerUIBundle({
