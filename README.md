@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/Project-Tomoe/tomoe"><img src="https://img.shields.io/github/stars/Project-Tomoe/tomoe?style=flat-square&color=FF69B4" alt="GitHub Stars"/></a>
   <a href="https://www.npmjs.com/package/tomoejs"><img src="https://img.shields.io/npm/v/tomoejs?style=flat-square&color=3399FF" alt="NPM Version"/></a>
-  <a href="https://github.com/Project-Tomoe/tomoe/blob/main/LICENSE"><img src="https://img.shields.io/github/license/Project-Tomoe/tomoe?style=flat-square&color=800080" alt="License"/></a>
+  <a href="https://github.com/Project-Tomoe/tomoe/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-purple?style=flat-square" alt="License"/></a>
   <img src="https://img.shields.io/badge/Bun-%3E%3D1.0-blue?style=flat-square" alt="Bun Support"/>
   <img src="https://img.shields.io/badge/Web%20Standards-100%25-brightgreen?style=flat-square" alt="Web Standards"/>
 </p>
