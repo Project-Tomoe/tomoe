@@ -31,7 +31,65 @@ function hasBun(): boolean {
   }
 }
 
-// Wait for the server port to be active
+// Programmatically resolve framework versions from installed node_modules
+function getFrameworkVersion(packageName: string): string {
+  const searchPaths = [
+    path.join(process.cwd(), "node_modules", packageName, "package.json"),
+    path.join(process.cwd(), "..", "node_modules", packageName, "package.json"),
+    path.join(process.cwd(), "..", "packages", "tomoe", "package.json") // fallback for tomoejs
+  ]
+
+  for (const p of searchPaths) {
+    try {
+      if (fs.existsSync(p)) {
+        const pkg = JSON.parse(fs.readFileSync(p, "utf8"))
+        if (pkg.name === packageName || packageName === "tomoejs") {
+          return pkg.version
+        }
+      }
+    } catch {}
+  }
+  return "latest"
+}
+
+// Forcefully clear the port of any zombie processes before launching a new target
+async function clearPort(port: number): Promise<void> {
+  return new Promise((resolve) => {
+    console.log(`🔌 Clearing any active socket listeners on port ${port}...`)
+    const killer = spawn("npx", ["kill-port", port.toString()], {
+      shell: true,
+      stdio: "ignore"
+    })
+    killer.on("exit", () => {
+      // Pause to let the OS release port handles from TIME_WAIT state
+      setTimeout(resolve, 800)
+    })
+  })
+}
+
+// Forcefully kill a child process and its entire process tree (essential on Windows)
+async function killProcessTree(child: ChildProcess): Promise<void> {
+  return new Promise((resolve) => {
+    if (!child.pid) {
+      resolve()
+      return
+    }
+
+    if (process.platform === "win32") {
+      const killer = spawn("taskkill", ["/pid", child.pid.toString(), "/f", "/t"], {
+        stdio: "ignore"
+      })
+      killer.on("exit", () => {
+        resolve()
+      })
+    } else {
+      child.kill("SIGKILL")
+      resolve()
+    }
+  })
+}
+
+// Wait for the server port to become active
 async function waitPort(port: number, timeoutMs = 5000): Promise<void> {
   const start = Date.now()
   while (Date.now() - start < timeoutMs) {
@@ -85,8 +143,16 @@ async function runAutocannon(url: string, headers: Record<string, string> = {}):
 
 async function runBenchmark() {
   const isBunAvailable = hasBun()
-  console.log(`🌸 TomoeJS Benchmark Suite`)
+
+  // Retrieve exact package versions dynamically for honest reporting
+  const tomoeVer = getFrameworkVersion("tomoejs")
+  const honoVer = getFrameworkVersion("hono")
+  const elysiaVer = getFrameworkVersion("elysia")
+  const expressVer = getFrameworkVersion("express")
+
+  console.log(`🌸 TomoeJS Verified Benchmark Suite`)
   console.log(`Environment: Node ${process.version}, Bun ${isBunAvailable ? "Available" : "Not Available"}`)
+  console.log(`Versions: TomoeJS v${tomoeVer}, Hono v${honoVer}, Elysia v${elysiaVer}, Express v${expressVer}`)
   console.log(`Config: ${CONNECTIONS} connections for ${DURATION_SECS} seconds per route`)
   console.log("--------------------------------------------------------------------------------\n")
 
@@ -107,6 +173,9 @@ async function runBenchmark() {
   const allResults: Record<string, BenchResult[]> = {}
 
   for (const target of targets) {
+    // 1. Force clear the port before starting the server to prevent any zombied socket collisions
+    await clearPort(PORT)
+
     console.log(`🚀 Starting target server: ${target.name}...`)
     let child: ChildProcess
 
@@ -117,17 +186,9 @@ async function runBenchmark() {
     } else {
       child = spawn("npx", ["tsx", target.file], {
         env: { ...process.env, PORT: PORT.toString() },
-        shell: true, // on windows tsx/npx need shell: true
+        shell: true, // required on Windows
       })
     }
-
-    // Capture logs to print if needed or handle startup issues
-    child.stdout?.on("data", (data) => {
-      // console.log(`[${target.name} STDOUT]: ${data}`)
-    })
-    child.stderr?.on("data", (data) => {
-      // console.error(`[${target.name} STDERR]: ${data}`)
-    })
 
     try {
       // Wait for server to start
@@ -158,11 +219,10 @@ async function runBenchmark() {
     } catch (e: any) {
       console.error(`❌ Failed benchmarks for ${target.name}:`, e.message)
     } finally {
-      // Clean up process
+      // Force kill the child process and its entire shell child tree to reclaim all memory/CPU
       console.log(`🔌 Stopping target server: ${target.name}...`)
-      child.kill("SIGTERM")
-      child.kill("SIGKILL") // Force kill to prevent port lockups
-      await new Promise((resolve) => setTimeout(resolve, 500))
+      await killProcessTree(child)
+      await new Promise((resolve) => setTimeout(resolve, 800))
     }
   }
 
@@ -177,6 +237,12 @@ async function runBenchmark() {
   if (isBunAvailable) {
     report += `* **Bun version**: 1.3.3 (or equivalent local version)\n`
   }
+  report += `\n`
+  report += `### Exact Framework Versions Tested\n`
+  report += `* **TomoeJS**: \`v${tomoeVer}\`\n`
+  report += `* **Hono**: \`v${honoVer}\`\n`
+  report += `* **Elysia**: \`v${elysiaVer}\`\n`
+  report += `* **Express**: \`v${expressVer}\`\n`
   report += `\n---\n\n`
 
   // Scenario lists

@@ -8,10 +8,10 @@
   },
   "dependencies": {
     "autocannon": "^7.15.0",
-    "elysia": "^1.2.2",
-    "express": "^4.21.2",
-    "hono": "^4.7.2",
-    "@hono/node-server": "^1.13.7",
+    "elysia": "latest",
+    "express": "latest",
+    "hono": "latest",
+    "@hono/node-server": "latest",
     "tomoejs": "workspace:*",
     "tsx": "^4.19.2"
   },
