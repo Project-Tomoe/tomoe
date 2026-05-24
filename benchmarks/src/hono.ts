@@ -40,9 +40,20 @@ app.get("/protected", (c) => {
 })
 
 const port = parseInt(process.env.PORT || "3000", 10)
-serve({
-  fetch: app.fetch,
-  port
-}, () => {
-  console.log(`Hono bench server listening on port ${port}`)
-})
+
+if (typeof Bun !== "undefined") {
+  // Native Bun.serve entry path for extreme Hono speed on Bun
+  Bun.serve({
+    port,
+    fetch: app.fetch
+  })
+  console.log(`Hono native Bun server listening on port ${port}`)
+} else {
+  // Legacy Node.js server
+  serve({
+    fetch: app.fetch,
+    port
+  }, () => {
+    console.log(`Hono Node adapter bench server listening on port ${port}`)
+  })
+}

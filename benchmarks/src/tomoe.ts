@@ -44,8 +44,17 @@ app.compile()
 
 const port = parseInt(process.env.PORT || "3000", 10)
 
-// Let's use standard node adapter for Bun / Node portability in benchmarks
-const server = createServer(app)
-server.listen(port, () => {
-  console.log(`TomoeJS bench server listening on port ${port}`)
-})
+if (typeof Bun !== "undefined") {
+  // Native Bun.serve entry path for extreme Bun speed
+  Bun.serve({
+    port,
+    fetch: (req) => app.fetch(req)
+  })
+  console.log(`TomoeJS native Bun server listening on port ${port}`)
+} else {
+  // Legacy Node.js adapter
+  const server = createServer(app)
+  server.listen(port, () => {
+    console.log(`TomoeJS Node adapter bench server listening on port ${port}`)
+  })
+}

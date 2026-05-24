@@ -15,34 +15,34 @@ This report lists the comparative performance benchmark results for **TomoeJS**,
 
 | Framework | Requests / Sec (Throughput) | Avg Latency (ms) | P99 Latency (ms) |
 |---|---|---|---|
-| **TomoeJS (Bun)** | 13,675 req/s | 6.84 ms | 23 ms |
-| **Hono (Node)** | 11,342 req/s | 8.32 ms | 18 ms |
-| **Express (Node)** | 10,631 req/s | 8.9 ms | 16 ms |
-| **TomoeJS (Node)** | 10,285 req/s | 9.22 ms | 27 ms |
-| **Hono (Bun)** | 9,022 req/s | 10.57 ms | 48 ms |
-| **Elysia (Bun)** | 8,858 req/s | 10.77 ms | 28 ms |
+| **TomoeJS (Bun)** | 30,890 req/s | 2.77 ms | 7 ms |
+| **Hono (Node)** | 12,394 req/s | 7.56 ms | 14 ms |
+| **Elysia (Bun)** | 10,502 req/s | 9.03 ms | 17 ms |
+| **TomoeJS (Node)** | 10,323 req/s | 9.19 ms | 27 ms |
+| **Express (Node)** | 10,282 req/s | 9.23 ms | 29 ms |
+| **Hono (Bun)** | 8,923 req/s | 10.71 ms | 33 ms |
 
 ### 🧬 Scenario 2: Radix Dynamic Routing (`/user/:id/posts/:postId`)
 
 | Framework | Requests / Sec (Throughput) | Avg Latency (ms) | P99 Latency (ms) |
 |---|---|---|---|
-| **Elysia (Bun)** | 39,235 req/s | 2.23 ms | 4 ms |
-| **Hono (Bun)** | 24,654 req/s | 3.56 ms | 8 ms |
-| **TomoeJS (Bun)** | 14,314 req/s | 6.49 ms | 15 ms |
-| **TomoeJS (Node)** | 11,097 req/s | 8.52 ms | 14 ms |
-| **Express (Node)** | 10,996 req/s | 8.59 ms | 14 ms |
-| **Hono (Node)** | 10,620 req/s | 8.91 ms | 14 ms |
+| **Elysia (Bun)** | 33,854 req/s | 2.58 ms | 6 ms |
+| **Hono (Bun)** | 32,688 req/s | 2.62 ms | 6 ms |
+| **TomoeJS (Bun)** | 31,555 req/s | 2.7 ms | 7 ms |
+| **Hono (Node)** | 12,150 req/s | 7.77 ms | 12 ms |
+| **TomoeJS (Node)** | 10,916 req/s | 8.66 ms | 15 ms |
+| **Express (Node)** | 8,602 req/s | 11.12 ms | 32 ms |
 
 ### 🧅 Scenario 3: Pre-Compiled Middleware Onion Pipeline (`/protected`)
 
 | Framework | Requests / Sec (Throughput) | Avg Latency (ms) | P99 Latency (ms) |
 |---|---|---|---|
-| **Elysia (Bun)** | 37,765 req/s | 2.31 ms | 5 ms |
-| **Hono (Bun)** | 21,515 req/s | 4.14 ms | 8 ms |
-| **TomoeJS (Bun)** | 14,714 req/s | 6.3 ms | 11 ms |
-| **TomoeJS (Node)** | 11,494 req/s | 8.21 ms | 15 ms |
-| **Express (Node)** | 10,172 req/s | 9.32 ms | 16 ms |
-| **Hono (Node)** | 9,604 req/s | 9.9 ms | 21 ms |
+| **Elysia (Bun)** | 37,642 req/s | 2.29 ms | 5 ms |
+| **TomoeJS (Bun)** | 35,794 req/s | 2.32 ms | 5 ms |
+| **Hono (Bun)** | 26,392 req/s | 3.28 ms | 8 ms |
+| **Hono (Node)** | 11,870 req/s | 7.94 ms | 14 ms |
+| **TomoeJS (Node)** | 11,191 req/s | 8.45 ms | 16 ms |
+| **Express (Node)** | 9,999 req/s | 9.48 ms | 27 ms |
 
 ## Summary of Findings
 1. **TomoeJS (Bun)** executes with extreme high-throughput, placing it side-by-side or ahead of frameworks like Hono and Elysia.
