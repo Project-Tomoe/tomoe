@@ -221,4 +221,57 @@ describe("Schema Validation Relics & Client SDK", () => {
     });
     expect(res.error).toBeNull();
   });
+
+  it("should handle functional err() returns from handler", async () => {
+    const { err } = await import("../../../src/relic/result");
+    const { NotFound } = await import("../../../src/relic/error");
+
+    app.get("/find-user/:id", (ctx) => {
+      if (ctx.params.id !== "1") {
+        return err(NotFound); // Return functional Err instead of throwing!
+      }
+      return ctx.json({ id: "1", name: "saif" });
+    });
+
+    const resFail = await app.fetch(new Request("http://localhost/find-user/2"));
+    expect(resFail.status).toBe(404);
+    const failData = await resFail.json();
+    expect(failData).toEqual({ error: "Not Found" });
+
+    const resSuccess = await app.fetch(new Request("http://localhost/find-user/1"));
+    expect(resSuccess.status).toBe(200);
+    const successData = await resSuccess.json();
+    expect(successData).toEqual({ id: "1", name: "saif" });
+  });
+
+  it("should handle thrown HttpErrors inside handler and trigger local onError handlers", async () => {
+    const { Unauthorized } = await import("../../../src/relic/error");
+
+    app.scope("/web-secure", unite(), (r) => {
+      r.onError(401, (ctx) => ctx.redirect("/login-page"));
+      r.get("/dashboard", () => {
+        throw Unauthorized; // Throw HttpError inside handler!
+      });
+    });
+
+    const res = await app.fetch(new Request("http://localhost/web-secure/dashboard"));
+    expect(res.status).toBe(302);
+    expect(res.headers.get("Location")).toBe("/login-page");
+  });
+
+  it("should handle functional err() returns inside handler and trigger local onError handlers", async () => {
+    const { err } = await import("../../../src/relic/result");
+    const { Unauthorized } = await import("../../../src/relic/error");
+
+    app.scope("/web-secure-func", unite(), (r) => {
+      r.onError(401, (ctx) => ctx.redirect("/login-page-func"));
+      r.get("/dashboard", () => {
+        return err(Unauthorized); // Return functional Err inside handler!
+      });
+    });
+
+    const res = await app.fetch(new Request("http://localhost/web-secure-func/dashboard"));
+    expect(res.status).toBe(302);
+    expect(res.headers.get("Location")).toBe("/login-page-func");
+  });
 });

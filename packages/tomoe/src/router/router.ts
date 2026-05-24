@@ -11,6 +11,7 @@ import { HttpError } from "../relic/error"
 import { unite } from "../relic/unite"
 import { RadixTree } from "./radix"
 import type { ExtractFromRelics } from "../types/standard-schema"
+import { isErr, type Err } from "../relic/result"
 
 // Handler & Middleware types 
 
@@ -59,7 +60,7 @@ export type Handler<
   P extends Record<string, string> = Record<string, never>,
   R extends Record<string, any> = {},
   Res = Response,
-> = (c: Context<E, P, R> & R) => Res | Promise<Res>
+> = (c: Context<E, P, R> & R) => Res | Err | Promise<Res | Err>
 
 export type Middleware<E extends Env = any> = (
   c: Context<E>,
@@ -143,7 +144,24 @@ function wrapWithRelics<P extends Record<string, string>, R extends Record<strin
       }
     }
 
-    return handler(wrapCtx)
+    try {
+      const result = await handler(wrapCtx)
+
+      if (isErr(result)) {
+        const customHandler = errorHandlers.get(result.error.status)
+        if (customHandler) return customHandler(wrapCtx)
+        return result.error.toResponse()
+      }
+
+      return result as any
+    } catch (errVal) {
+      if (errVal instanceof HttpError) {
+        const customHandler = errorHandlers.get(errVal.status)
+        if (customHandler) return customHandler(wrapCtx)
+        return errVal.toResponse()
+      }
+      throw errVal
+    }
   }
 }
 
@@ -466,29 +484,21 @@ export class Router<
     relicsOrHandler: RelicInput<Ctx> | Handler<E, ParamsObject<Path>>,
     handler?: Handler<E, ParamsObject<Path>, Ctx>,
   ): any {
-    // Plain handler — no relics
-    if (typeof relicsOrHandler === "function") {
-      this.#routes.push({ method, path, handler: relicsOrHandler as any })
-      return this as any
-    }
+    const hasRelics = handler !== undefined
+    const actualHandler = hasRelics ? handler : (relicsOrHandler as Handler)
+    const relicsList = hasRelics ? normalizeRelics(relicsOrHandler as any).relics : []
 
-    // Relics provided — normalize, validate, wrap
-    if (!handler) {
-      throw new Error(
-        `app.${method.toLowerCase()}('${path}'): handler is required when relics are provided.`
-      )
-    }
-
-    const group = normalizeRelics(relicsOrHandler)
-
-    const errors = validateRelicChain(group.relics, path)
-    if (errors.length > 0) {
-      throw new Error(`TomoeJS: Invalid relic configuration:\n${errors.join("\n")}`)
+    if (hasRelics) {
+      const group = normalizeRelics(relicsOrHandler as any)
+      const errors = validateRelicChain(group.relics, path)
+      if (errors.length > 0) {
+        throw new Error(`TomoeJS: Invalid relic configuration:\n${errors.join("\n")}`)
+      }
     }
 
     // Inline routes have no scope-level onError — use empty map (default behavior)
     const emptyErrorHandlers = new Map<number, (ctx: Context<any, any, Ctx>) => Response>()
-    const wrapped = wrapWithRelics(group.relics, handler, emptyErrorHandlers)
+    const wrapped = wrapWithRelics(relicsList, actualHandler as any, emptyErrorHandlers)
     this.#routes.push({ method, path, handler: wrapped as any })
     return this as any
   }
@@ -690,9 +700,11 @@ export class Router<
       .filter((m) => {
         if (m.path === "*" || m.path === "/*") return true
         const prefix = m.path.replace(/\*$/, "")
+        const cleanPrefix = prefix.endsWith("/") && prefix !== "/" ? prefix.slice(0, -1) : prefix
+        const cleanRoute = routePath.endsWith("/") && routePath !== "/" ? routePath.slice(0, -1) : routePath
         return (
-          routePath === prefix ||
-          routePath.startsWith(prefix.endsWith("/") ? prefix : `${prefix}/`)
+          cleanRoute === cleanPrefix ||
+          cleanRoute.startsWith(`${cleanPrefix}/`)
         )
       })
       .map((m) => m.handler)
