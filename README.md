@@ -145,11 +145,12 @@ Initialize your project and install `tomoejs` using Bun or your package manager 
 
 ```bash
 # Using Bun (Recommended)
+mkdir tomoe-app
 bun init
-bun add tomoejs
+bun add tomoejs@rc
 
 # Using npm / pnpm / yarn
-npm install tomoejs
+npm install tomoejs@rc
 ```
 
 ---
