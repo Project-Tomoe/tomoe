@@ -274,4 +274,29 @@ describe("Schema Validation Relics & Client SDK", () => {
     expect(res.status).toBe(302);
     expect(res.headers.get("Location")).toBe("/login-page-func");
   });
+
+  it("should support route-specific validation relics inside ScopedRouter", async () => {
+    const dbRelic = relic("db", async () => ({ value: "mock-db" }));
+    const querySchema = z.object({ limit: z.string().transform(Number) });
+
+    app.scope("/scoped-api", dbRelic, (r) => {
+      // Pass route-specific query validator relic to r.get() inside scope
+      r.get("/items", relic.query(querySchema), (ctx) => {
+        return ctx.json({
+          dbValue: ctx.db.value,
+          limit: ctx.query.limit,
+          limitType: typeof ctx.query.limit,
+        });
+      });
+    });
+
+    const res = await app.fetch(new Request("http://localhost/scoped-api/items?limit=5"));
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data).toEqual({
+      dbValue: "mock-db",
+      limit: 5,
+      limitType: "number",
+    });
+  });
 });

@@ -197,24 +197,54 @@ export class ScopedRouter<R extends Record<string, any> = {}> {
       : this.#prefix
   }
 
-  get<Path extends string>(path: Path, handler: Handler<any, ParamsObject<Path>, R>): this {
-    return this.#register("GET", path, handler)
+  get<Path extends string>(path: Path, handler: Handler<any, ParamsObject<Path>, R>): this
+  get<Path extends string, RelicsInput extends RelicInput>(
+    path: Path,
+    relics: RelicsInput,
+    handler: Handler<any, ParamsObject<Path>, R & RelicContext<RelicsInput>>,
+  ): this
+  get(path: string, relicsOrHandler: any, handler?: any): this {
+    return this.#register("GET", path, relicsOrHandler, handler)
   }
 
-  post<Path extends string>(path: Path, handler: Handler<any, ParamsObject<Path>, R>): this {
-    return this.#register("POST", path, handler)
+  post<Path extends string>(path: Path, handler: Handler<any, ParamsObject<Path>, R>): this
+  post<Path extends string, RelicsInput extends RelicInput>(
+    path: Path,
+    relics: RelicsInput,
+    handler: Handler<any, ParamsObject<Path>, R & RelicContext<RelicsInput>>,
+  ): this
+  post(path: string, relicsOrHandler: any, handler?: any): this {
+    return this.#register("POST", path, relicsOrHandler, handler)
   }
 
-  put<Path extends string>(path: Path, handler: Handler<any, ParamsObject<Path>, R>): this {
-    return this.#register("PUT", path, handler)
+  put<Path extends string>(path: Path, handler: Handler<any, ParamsObject<Path>, R>): this
+  put<Path extends string, RelicsInput extends RelicInput>(
+    path: Path,
+    relics: RelicsInput,
+    handler: Handler<any, ParamsObject<Path>, R & RelicContext<RelicsInput>>,
+  ): this
+  put(path: string, relicsOrHandler: any, handler?: any): this {
+    return this.#register("PUT", path, relicsOrHandler, handler)
   }
 
-  delete<Path extends string>(path: Path, handler: Handler<any, ParamsObject<Path>, R>): this {
-    return this.#register("DELETE", path, handler)
+  delete<Path extends string>(path: Path, handler: Handler<any, ParamsObject<Path>, R>): this
+  delete<Path extends string, RelicsInput extends RelicInput>(
+    path: Path,
+    relics: RelicsInput,
+    handler: Handler<any, ParamsObject<Path>, R & RelicContext<RelicsInput>>,
+  ): this
+  delete(path: string, relicsOrHandler: any, handler?: any): this {
+    return this.#register("DELETE", path, relicsOrHandler, handler)
   }
 
-  patch<Path extends string>(path: Path, handler: Handler<any, ParamsObject<Path>, R>): this {
-    return this.#register("PATCH", path, handler)
+  patch<Path extends string>(path: Path, handler: Handler<any, ParamsObject<Path>, R>): this
+  patch<Path extends string, RelicsInput extends RelicInput>(
+    path: Path,
+    relics: RelicsInput,
+    handler: Handler<any, ParamsObject<Path>, R & RelicContext<RelicsInput>>,
+  ): this
+  patch(path: string, relicsOrHandler: any, handler?: any): this {
+    return this.#register("PATCH", path, relicsOrHandler, handler)
   }
 
   /**
@@ -232,14 +262,26 @@ export class ScopedRouter<R extends Record<string, any> = {}> {
     return this
   }
 
-  #register<Path extends string>(
+  #register(
     method: HTTPMethod,
-    path: Path,
-    handler: Handler<any, ParamsObject<Path>, R>,
+    path: string,
+    relicsOrHandler: any,
+    handler?: any,
   ): this {
+    let actualHandler: any
+    let combinedRelics = [...this.#relics]
+
+    if (typeof relicsOrHandler === "function") {
+      actualHandler = relicsOrHandler
+    } else {
+      actualHandler = handler
+      const localRelics = normalizeRelics(relicsOrHandler).relics
+      combinedRelics = [...combinedRelics, ...localRelics]
+    }
+
     const fullPath = `${this.#normalizedPrefix}${path === "/" ? "" : path}`
-    const wrapped = wrapWithRelics(this.#relics, handler, this.#errorHandlers)
-    this.#parent._registerRoute(method, fullPath, wrapped as any, this.#relics)
+    const wrapped = wrapWithRelics(combinedRelics, actualHandler as any, this.#errorHandlers)
+    this.#parent._registerRoute(method, fullPath, wrapped as any, combinedRelics)
     return this
   }
 }
