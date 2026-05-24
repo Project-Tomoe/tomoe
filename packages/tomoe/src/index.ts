@@ -36,12 +36,8 @@ export { Context } from "./context"
 export type { Env, ExecutionContext } from "./context"
 
 
-// Tokens
-export { token } from "./relic/token"
-export type { Token, TokenType } from "./relic/token"
-
 // Relic definition
-export { relic } from "./relic/relic"
+export { relic, guard } from "./relic/relic"
 export type {
   AnyRelic,
   ProvidingRelic,
