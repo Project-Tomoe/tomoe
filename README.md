@@ -134,7 +134,41 @@ app.get("/static/*", (ctx) => {
 
 ---
 
-### 2. Request Body & Input Parsing
+### 2. Sub-routers & Prefix Routing (`app.route()`, `app.scope()`)
+Tomoe provides two clean models for structuring large scale applications:
+
+#### A. Modular Sub-Routers (`app.route`)
+Split your endpoints into clean standalone sub-routers and mount them seamlessly at specific prefixes.
+
+```ts
+import { Tomoe } from "tomoejs"
+
+// Standalone sub-router
+const animeRouter = new Tomoe()
+animeRouter.get("/list", (c) => c.json(["FMA", "Hunter x Hunter"]))
+animeRouter.get("/:id", (c) => c.json({ id: c.param("id") }))
+
+const app = new Tomoe()
+
+// Mount with prefix. Endpoints resolved at `/api/anime/list` and `/api/anime/:id`
+app.route("/api/anime", animeRouter)
+```
+
+#### B. Protected Scope Routing (`app.scope`)
+Group routes under a path prefix protected by a specific Relic access policy. All nested routes automatically gain type-safe access to relic properties.
+
+```ts
+app.scope("/admin", adminAccessRelics, (r) => {
+  r.get("/dashboard", (ctx) => {
+    // Access fully typed and validated properties from the scope relics!
+    return ctx.json({ user: ctx.user, org: ctx.org })
+  })
+})
+```
+
+---
+
+### 3. Request Body & Input Parsing
 Unlike other frameworks that wrap request objects with custom classes, **Tomoe keeps the Request object 100% native** for maximum performance and zero-allocation overhead. You can parse incoming payloads using **Web Standard APIs (without Relics)** or **Contract-Driven Schema Validation (with Relics)**.
 
 #### A. The Native Web-Standard Way (Without Relics)
@@ -188,7 +222,7 @@ app.post("/register", relic.body(registerSchema), (ctx) => {
 
 ---
 
-### 3. Context (`Context`) API
+### 4. Context (`Context`) API
 Handlers receive a fully typed `Context` object wrapping the standard `Request` and providing clean response utilities.
 
 * `ctx.req`: Standard `Request` object.
@@ -222,7 +256,7 @@ app.get("/cookies", (ctx) => {
 
 ---
 
-### 4. Relics & Guards (Contract Architecture)
+### 5. Relics & Guards (Contract Architecture)
 Instead of relying on standard unsafe middleware side-effects, declare explicit dependency chains.
 
 * **Relics**: Generate values and inject them into handler contexts.
@@ -263,7 +297,7 @@ app.scope("/admin", adminAccess, (router) => {
 
 ---
 
-### 5. Input Schema Validation
+### 6. Input Schema Validation
 Tomoe offers built-in schema validation relics supporting standard schema systems (Zod, Valibot, ArkType, TypeBox).
 
 ```ts
@@ -290,10 +324,55 @@ app.post("/posts", unite(relic.body(createPostSchema), relic.query(querySchema))
 
 ---
 
-### 6. Built-in Middlewares
+### 7. Custom & Built-in Middlewares
+In Tomoe, **Middleware controls request flow** (like CORS, logs, and trace headers) while **Relics define state contracts**. 
+
+#### Writing a Custom Middleware
+A Tomoe middleware is a standard function with the signature `(ctx: Context, next: () => Promise<Response>) => Response | Promise<Response>`:
+
+```ts
+import { Tomoe, type Middleware } from "tomoejs"
+
+// 1. Example: A simple custom request timing middleware
+const timerMiddleware = (): Middleware => {
+  return async (ctx, next) => {
+    const start = performance.now()
+    
+    // Execute subsequent middlewares and handler
+    const response = await next()
+    
+    const duration = (performance.now() - start).toFixed(2)
+    response.headers.set("X-Response-Time", `${duration}ms`)
+    
+    return response
+  }
+}
+
+// 2. Example: Short-circuiting custom IP whitelist middleware
+const ipWhitelist = (allowedIps: string[]): Middleware => {
+  return async (ctx, next) => {
+    const ip = ctx.header("X-Real-IP") || "unknown"
+    if (!allowedIps.includes(ip)) {
+      // Short-circuit: return response immediately without calling next()!
+      return ctx.json({ error: "Access Denied: IP blocked" }, { status: 403 })
+    }
+    return next()
+  }
+}
+
+const app = new Tomoe()
+
+// Register custom middlewares globally
+app.use(timerMiddleware())
+
+// Register custom middlewares scoped to paths
+app.use("/api/*", ipWhitelist(["1.2.3.4"]))
+```
+
+#### Built-in Middlewares
 Tomoe packages core production middlewares designed for extreme efficiency and OOM security:
 
-#### CORS
+##### CORS
 ```ts
 import { cors } from "tomoejs"
 
@@ -304,14 +383,14 @@ app.use(cors({
 }))
 ```
 
-#### Formatted Logger
+##### Formatted Logger
 ```ts
 import { logger } from "tomoejs"
 
 app.use(logger())
 ```
 
-#### Host-matching CSRF (Reverse Proxy Friendly)
+##### Host-matching CSRF (Reverse Proxy Friendly)
 ```ts
 import { csrf } from "tomoejs"
 
@@ -322,7 +401,7 @@ app.use(csrf({
 }))
 ```
 
-#### Rate Limiter (OOM-Resistant Sliding Window)
+##### Rate Limiter (OOM-Resistant Sliding Window)
 ```ts
 import { rateLimit } from "tomoejs"
 
@@ -335,7 +414,55 @@ app.use(rateLimit({
 
 ---
 
-### 7. Interactive OpenAPI & Swagger UI docs
+### 8. Scope-Aware & Unified Error Handling (Functional & Thrown)
+Tomoe implements an extremely fast, zero-overhead pipeline that supports both **functional returns** (recommended to avoid expensive V8 stack traces) and **standard exceptions**.
+
+#### Thrown vs Functional Errors
+```ts
+import { err, httpError, Unauthorized, NotFound } from "tomoejs"
+
+// 1. Defining expected domain errors
+const RateLimited = httpError(429, "Too many requests")
+
+// 2. Functional returns in Relics (No throw, extremely fast)
+const authRelic = relic("user", async (ctx) => {
+  const token = ctx.header("Authorization")
+  if (!token) return err(Unauthorized) // Return functional error
+  return db.verify(token)
+})
+
+// 3. Functional returns in Handlers
+app.get("/user/:id", (ctx) => {
+  const user = db.find(ctx.param("id"))
+  if (!user) return err(NotFound) // Instantly sends 404
+  return ctx.json(user)
+})
+```
+
+#### Global and Scope-level Error Overrides
+You can intercept specific HTTP error statuses. When registered within a scope, they catch errors originating from **both relics and handlers** in that scope:
+
+```ts
+app.scope("/api", authRelic, (r) => {
+  // Overrides all 401 Unauthorized errors in this prefix
+  r.onError(401, (ctx) => {
+    return ctx.json({ status: "error", message: "Please sign in to proceed" }, { status: 401 })
+  })
+
+  r.get("/profile", (ctx) => ctx.json(ctx.user))
+})
+
+// Global fallback handler for uncaught runtime exceptions
+app.onError((err, ctx) => {
+  console.error(err)
+  return ctx?.json({ error: "Fatal Internal Crash" }, { status: 500 })
+    ?? new Response("Fatal Error", { status: 500 })
+})
+```
+
+---
+
+### 9. Interactive OpenAPI & Swagger UI docs
 Tomoe automatically builds Swagger UI endpoints with support for circular schemas and Locked CDN resources.
 
 ```ts
@@ -354,7 +481,25 @@ swagger(app, {
 
 ---
 
-### 8. End-to-End Type-Safe Client SDK
+### 10. Graph Inspection & Compilation
+For peak production performance, Tomoe compiles the entire backtracking radix tree and middleware chains at startup. This validates your relics dependency chains completely **before** accepting requests.
+
+```ts
+const app = new Tomoe()
+// ... register routes
+
+// 1. Explicitly compile at startup (highly recommended in production)
+app.compile()
+
+// 2. Inspect dependency graph programmatically
+const graph = app.graph()
+console.log(`Routes registered: ${graph.routes.length}`)
+console.log(`Tree Max Depth: ${graph.stats.maxDepth}`)
+```
+
+---
+
+### 11. End-to-End Type-Safe Client SDK
 Connect your frontend directly with complete static type safety:
 
 ```ts
@@ -382,7 +527,7 @@ const { data, error } = await client("/posts").post({
 
 ---
 
-### 9. Deployment & Runtimes (Deploy Anywhere)
+### 12. Deployment & Runtimes (Deploy Anywhere)
 Tomoe runs anywhere that supports modern Web Standards natively or through standard adapters.
 
 #### A. Bun
