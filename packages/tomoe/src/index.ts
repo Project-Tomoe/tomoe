@@ -77,7 +77,7 @@ export type {
 } from "./types/inference"
 
 //  Version 
-export const VERSION = "0.0.5"
+export const VERSION = "0.1.0"
 
 // Context types
 export type { CookieOptions } from "./context"
