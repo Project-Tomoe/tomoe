@@ -86,7 +86,20 @@ function wrapWithRelics<P extends Record<string, string>, R extends Record<strin
       return relicError.toResponse()
     }
 
-    return handler(ctx)
+    const proxiedCtx = new Proxy(ctx, {
+      get(target, prop, receiver) {
+        if (prop in target) {
+          const val = Reflect.get(target, prop, receiver)
+          if (typeof val === "function") {
+            return val.bind(target)
+          }
+          return val
+        }
+        return target._getRelicByName(prop as string)
+      }
+    })
+
+    return handler(proxiedCtx as any)
   }
 }
 

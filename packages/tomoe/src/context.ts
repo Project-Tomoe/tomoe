@@ -14,7 +14,7 @@
  */
 
 import type { Prettify } from "./types/utils"
-import type { Token, TokenType } from "./relic/token"
+import type { ProvidingRelic } from "./relic/relic"
 
 /**
  * Environment bindings type — extended by middleware to add properties.
@@ -52,9 +52,14 @@ export class Context<
 
   /**
    * Relic store — populated by the executor before the handler runs.
-   * Keyed by Token._id (Symbol) for collision-free access.
+   * Keyed by Relic._id (Symbol) for collision-free access.
    */
   #relicStore: Map<symbol, any>
+
+  /**
+   * Relic store by name — populated by executor for named relics.
+   */
+  #relicStoreByName: Map<string, any>
 
   /**
    * Cached parsed URL — avoids repeated new URL() calls.
@@ -76,6 +81,7 @@ export class Context<
     this.#params = params
     this.#env = { ...env }
     this.#relicStore = new Map()
+    this.#relicStoreByName = new Map()
 
     if (executionCtx) {
       this.#executionCtx = executionCtx
@@ -151,7 +157,7 @@ export class Context<
   // Relic store (internal — used by executor and scope proxy)
 
   /**
-   * Internal: store a relic-provided value by token id.
+   * Internal: store a relic-provided value by relic symbol id.
    * Called by the relic executor — not for user use.
    */
   _setRelic(id: symbol, value: any): void {
@@ -159,27 +165,41 @@ export class Context<
   }
 
   /**
-   * Internal: retrieve a relic-provided value by token id.
-   * Called by the relic executor and the typed scope proxy.
+   * Internal: store a relic-provided value by relic name.
+   */
+  _setRelicByName(name: string, value: any): void {
+    this.#relicStoreByName.set(name, value)
+  }
+
+  /**
+   * Internal: retrieve a relic-provided value by relic name.
+   */
+  _getRelicByName(name: string): any {
+    return this.#relicStoreByName.get(name)
+  }
+
+  /**
+   * Internal: retrieve a relic-provided value by relic symbol id.
+   * Called by the relic executor.
    */
   _getRelic(id: symbol): any {
     return this.#relicStore.get(id)
   }
 
   /**
-   * Get a relic value by its typed token.
-   * This is the typed, user-facing relic accessor.
+   * Get a relic value by its typed relic reference.
+   * This is the typed, user-facing relic accessor for anonymous relics.
    *
    * @example
-   * const user = ctx.relic(UserCtx)  // typed as User
+   * const user = ctx.relic(auth)  // typed as User
    */
-  relic<T>(token: Token<T>): T {
-    const value = this.#relicStore.get(token._id)
+  relic<T>(targetRelic: ProvidingRelic<any, T>): T {
+    const value = this.#relicStore.get(targetRelic._id)
 
     if (value === undefined) {
       throw new Error(
-        `ctx.relic(${token._name}): value not found. ` +
-        `Make sure this route is inside a scope with a relic that provides ${token._name}.`
+        `ctx.relic(${targetRelic.name || "anonymous"}): value not found. ` +
+        `Make sure this route is inside a scope with a relic that provides it.`
       )
     }
 
