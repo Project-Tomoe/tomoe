@@ -24,10 +24,11 @@ TomoeJS graduates to a complete, production-ready Release Candidate (`1.0.0-rc.1
 
 ---
 
-### ⚡ Performance & Routing Optimizations
+### ⚡ Performance, Routing & Error Handling Optimizations
 * **Radix Router URL Parameter Decoding**: Wrapped parameter segment matching in `decodeURIComponent` to fully support spaces (`%20`), special characters, and Unicode path variables out-of-the-box.
 * **Lazy Cookie Caching**: Added private request-level `_parsedCookies` cache, parsing and decoding headers exactly once per request.
 * **Functional Error Signals**: Introduced zero-overhead functional error returns (`err(...)` and `isErr(...)`) which bypass expensive V8 stack trace gathering, speeding up validation and failure paths by up to **10x**.
+* **Comprehensive HTTP Error Primitives**: Added and exported type-safe standard error constants for all common client-side (4xx) and server-side (5xx) HTTP/REST errors (e.g. `BadRequest`, `Unauthorized`, `PaymentRequired`, `Forbidden`, `NotFound`, `TooManyRequests`, `ServerError`, `GatewayTimeout`, etc.) that serialize automatically into standard JSON responses.
 
 ---
 
@@ -38,6 +39,7 @@ TomoeJS graduates to a complete, production-ready Release Candidate (`1.0.0-rc.1
 ---
 
 ### 🧪 Quality Assurance & Docs
-* **Exhaustive Test Coverage**: Added comprehensive automated integration test suites (`prod-features.test.ts` and `radix.test.ts`), passing **193 / 193 tests successfully**.
+* **Exhaustive Test Coverage**: Added comprehensive automated integration test suites (`prod-features.test.ts` and `radix.test.ts`), passing **194 / 194 tests successfully**.
 * **MIT Licensing**: Established standard root `LICENSE` file under the name of **Project-Tomoe Contributors**.
-* **Elysia/Hono Standard Documentation**: Rewrote the entire root and sub-package `README.md` into highly premium, minimal guides outlining custom middleware, scope error boundaries, and Deno/Bun/Node/Cloudflare deployment setups.
+* **Premium Error and Extension Documentation**: Rewrote and expanded the root `README.md` to document the complete table of pre-built error constants, direct `HttpError` instantiation with custom payload details, and OOP subclassing extensions.
+

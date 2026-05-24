@@ -428,25 +428,100 @@ app.use(rateLimit({
 ### 8. Scope-Aware & Unified Error Handling (Functional & Thrown)
 Tomoe implements an extremely fast, zero-overhead pipeline that supports both **functional returns** (recommended to avoid expensive V8 stack traces) and **standard exceptions**.
 
-#### Thrown vs Functional Errors
+#### Standard Pre-built HTTP Errors
+Tomoe exports standard, type-safe error constants covering all common REST and HTTP status codes. When returned or thrown, the framework automatically serializes them into standard JSON responses (e.g. `{ error: "Unauthorized" }` with a `401` status).
+
+| Category | Constant | Status Code | Default Message |
+|---|---|---|---|
+| **Client Errors (4xx)** | `BadRequest` | 400 | `"Bad Request"` |
+| | `Unauthorized` | 401 | `"Unauthorized"` |
+| | `PaymentRequired` | 402 | `"Payment Required"` (Customizable) |
+| | `Forbidden` | 403 | `"Forbidden"` |
+| | `NotFound` | 404 | `"Not Found"` |
+| | `MethodNotAllowed` | 405 | `"Method Not Allowed"` |
+| | `NotAcceptable` | 406 | `"Not Acceptable"` |
+| | `RequestTimeout` | 408 | `"Request Timeout"` |
+| | `Conflict` | 409 | `"Conflict"` |
+| | `Gone` | 410 | `"Gone"` |
+| | `PayloadTooLarge` | 413 | `"Payload Too Large"` |
+| | `UnsupportedMediaType` | 415 | `"Unsupported Media Type"` |
+| | `UnprocessableEntity` | 422 | `"Unprocessable Entity"` |
+| | `TooManyRequests` | 429 | `"Too Many Requests"` |
+| **Server Errors (5xx)** | `ServerError` | 500 | `"Internal Server Error"` |
+| | `NotImplemented` | 501 | `"Not Implemented"` |
+| | `BadGateway` | 502 | `"Bad Gateway"` |
+| | `ServiceUnavailable` | 503 | `"Service Unavailable"` |
+| | `GatewayTimeout` | 504 | `"Gateway Timeout"` |
+
+#### Defining Custom Error Kinds
+If the pre-built error constants don't cover your use case, you can define your own custom HTTP errors in three elegant ways:
+
+##### A. Using the `httpError` Helper Function
+Create standard lightweight errors with customizable message strings:
 ```ts
-import { err, httpError, Unauthorized, NotFound } from "tomoejs"
+import { httpError } from "tomoejs"
 
-// 1. Defining expected domain errors
-const RateLimited = httpError(429, "Too many requests")
+// Define a custom status/message
+const TeapotError = httpError(418, "I'm a teapot")
+```
 
-// 2. Functional returns in Relics (No throw, extremely fast)
+##### B. Using `HttpError` Constructor with Custom Payloads
+For rich API responses (e.g. containing validation maps or specific error codes), instantiate `HttpError` directly. The third argument accepts a `details` object which gets automatically merged into the final JSON output:
+```ts
+import { HttpError, err } from "tomoejs"
+
+app.post("/checkout", (ctx) => {
+  if (insufficientFunds) {
+    const error = new HttpError(402, "Payment Failed", {
+      reason: "INSUFFICIENT_FUNDS",
+      availableBalance: 12.50,
+      required: 49.99
+    })
+    // Responds automatically with HTTP 402 and the JSON structure:
+    // { "error": "Payment Failed", "reason": "INSUFFICIENT_FUNDS", "availableBalance": 12.5, "required": 49.99 }
+    return err(error)
+  }
+})
+```
+
+##### C. OOP Subclassing
+Inherit directly from the `HttpError` class to integrate with domain-driven workflows:
+```ts
+import { HttpError } from "tomoejs"
+
+class DatabaseTimeout extends HttpError {
+  constructor(query: string) {
+    super(504, "Database connection timeout", { query, timestamp: Date.now() })
+    this.name = "DatabaseTimeout"
+  }
+}
+```
+
+#### Thrown vs Functional Errors
+You can return errors functionally via `err(...)` (which is highly optimized in V8 by bypassing stack trace collection) or throw them natively:
+```ts
+import { err, Unauthorized, NotFound } from "tomoejs"
+
+// 1. Functional returns in Relics (No throw, extremely fast)
 const authRelic = relic("user", async (ctx) => {
   const token = ctx.header("Authorization")
   if (!token) return err(Unauthorized) // Return functional error
   return db.verify(token)
 })
 
-// 3. Functional returns in Handlers
+// 2. Functional returns in Handlers
 app.get("/user/:id", (ctx) => {
   const user = db.find(ctx.param("id"))
   if (!user) return err(NotFound) // Instantly sends 404
   return ctx.json(user)
+})
+
+// 3. Thrown exceptions inside Handlers (Tomoe catches these automatically)
+app.get("/admin", (ctx) => {
+  if (!ctx.user.isAdmin) {
+    throw Forbidden // Auto-caught and converted to standard 403 response
+  }
+  return ctx.text("Welcome")
 })
 ```
 
