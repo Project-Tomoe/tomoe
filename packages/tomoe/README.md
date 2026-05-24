@@ -134,7 +134,7 @@ app.get("/static/*", (ctx) => {
 
 ---
 
-### 2. Request Body & Input Parsing (All Options)
+### 2. Request Body & Input Parsing
 Unlike other frameworks that wrap request objects with custom classes, **Tomoe keeps the Request object 100% native** for maximum performance and zero-allocation overhead. You can parse incoming payloads using **Web Standard APIs (without Relics)** or **Contract-Driven Schema Validation (with Relics)**.
 
 #### A. The Native Web-Standard Way (Without Relics)
@@ -382,24 +382,55 @@ const { data, error } = await client("/posts").post({
 
 ---
 
-### 9. Runtimes & Server Adapters
+### 9. Deployment & Runtimes (Deploy Anywhere)
+Tomoe runs anywhere that supports modern Web Standards natively or through standard adapters.
 
-#### Bun / Cloudflare Workers
-Export the application directly.
+#### A. Bun
+Run natively at supreme speeds on the Bun JavaScript runtime:
 ```ts
+import { Tomoe } from "tomoejs"
+
 const app = new Tomoe()
-app.get("/", (c) => c.text("Running natively!"))
+app.get("/", (c) => c.text("Running natively on Bun!"))
 
 export default app
 ```
+Launch the server:
+```bash
+bun run --hot index.ts
+```
 
-#### Node.js Server Adapter
-Use the built-in `createServer` adapter to deploy on standard Node.js runtimes:
+#### B. Cloudflare Workers
+Export the application fetch handler directly:
+```ts
+import { Tomoe } from "tomoejs"
+
+const app = new Tomoe()
+app.get("/", (c) => c.text("Running on Cloudflare Workers!"))
+
+export default {
+  fetch: app.fetch
+}
+```
+
+#### C. Deno
+Deno natively supports standard Request/Response handlers:
+```ts
+import { Tomoe } from "tomoejs"
+
+const app = new Tomoe()
+app.get("/", (c) => c.text("Running on Deno!"))
+
+Deno.serve((req) => app.fetch(req))
+```
+
+#### D. Node.js
+Deploy on standard legacy Node.js environments using the built-in `createServer` stream adapter:
 ```ts
 import { Tomoe, createServer } from "tomoejs"
 
 const app = new Tomoe()
-app.get("/", (c) => c.text("Node server running!"))
+app.get("/", (c) => c.text("Running on Node.js!"))
 
 const server = createServer(app)
 server.listen(3000, () => {
