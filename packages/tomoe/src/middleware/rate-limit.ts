@@ -27,6 +27,24 @@ export function rateLimit(options: RateLimitOptions = {}): Middleware {
     const key = keyGenerator(c);
     const now = Date.now();
 
+    // Capacity capping & lazy sweep to prevent OOM
+    if (hits.size >= 10000 && !hits.has(key)) {
+      for (const [k, ts] of hits.entries()) {
+        const active = ts.filter((t) => now - t < windowMs);
+        if (active.length === 0) {
+          hits.delete(k);
+        } else {
+          hits.set(k, active);
+        }
+      }
+      if (hits.size >= 10000) {
+        for (const k of hits.keys()) {
+          hits.delete(k);
+          if (hits.size < 10000) break;
+        }
+      }
+    }
+
     let timestamps = hits.get(key) || [];
     timestamps = timestamps.filter((t) => now - t < windowMs);
 
