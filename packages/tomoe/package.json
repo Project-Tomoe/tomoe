@@ -23,6 +23,7 @@
   ],
   "scripts": {
     "build": "tsc --project tsconfig.build.json",
+    "prepublishOnly": "node -e \"require('fs').copyFileSync('../../README.md', './README.md')\"",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
