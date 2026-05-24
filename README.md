@@ -114,6 +114,48 @@ No ordering bugs.
 
 ---
 
+## 🛠️ Built-in Schema Validation & Type-Safe Client
+
+Tomoe has first-class support for **Standard Schema (Zod, ArkType, Valibot, etc.)** and **TypeBox**. When you validate inputs via schema relics, they are automatically typed in the handler and propagated to the E2E client.
+
+```ts
+import { relic } from "tomoejs"
+import { z } from "zod"
+
+const userSchema = z.object({
+  name: z.string(),
+  email: z.string().email(),
+})
+
+// Validate request body
+const validateBody = relic.body(userSchema)
+
+const app = new Tomoe()
+  .post("/users", validateBody, (ctx) => {
+    // ctx.body is fully typed to userSchema's output!
+    return ctx.json({ status: "created", user: ctx.body })
+  })
+
+export type AppRouter = typeof app
+```
+
+### E2E Type-Safe Client SDK
+Connect your frontend directly with complete static type safety:
+
+```ts
+import { createClient } from "tomoejs"
+import type { AppRouter } from "./server"
+
+const client = createClient<AppRouter>("http://localhost:3000")
+
+// Fully typed response, query, params, headers, and request body!
+const { data, error } = await client("/users").post({
+  body: { name: "Killua", email: "killua@zoldyck.com" }
+})
+```
+
+---
+
 ## Execution model
 
 ```
@@ -121,7 +163,7 @@ Middleware ➡️ Relics ➡️ Handler
 ```
 
 * Middleware controls request flow (CORS, logging)
-* Relics define required state (auth, db queries)
+* Relics define required state (auth, db queries, schema validation)
 * Handlers stay pure
 
 Relics are validated and optimized at startup.
@@ -136,6 +178,9 @@ Relics are validated and optimized at startup.
 * Contract-based data flow (Relics & Guards)
 * Startup-time validation
 * Backtracking radix router
+* First-class Standard Schema & TypeBox validation relics
+* E2E type-safe path-based Client SDK
+* Scope-aware unified error pipeline & functional error returns (`err(...)`)
 
 ---
 

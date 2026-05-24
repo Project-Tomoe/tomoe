@@ -50,6 +50,7 @@ export default app
 ## Table of Contents
 
 - [Routing](#routing)
+  - [Sub-routers & app.route()](#sub-routers--approute)
 - [Context](#context)
 - [Middleware](#middleware)
 - [Relics](#relics)
@@ -57,9 +58,11 @@ export default app
   - [Anonymous Relics](#anonymous-relics)
   - [Guard Relics](#guard-relics)
   - [unite()](#unite)
+  - [Schema Validation Relics](#schema-validation-relics)
   - [Scopes](#scopes)
   - [Error Handling](#error-handling)
   - [Relic Dependencies](#relic-dependencies)
+- [E2E Client SDK](#e2e-client-sdk)
 - [Compile](#compile)
 - [Different Port](#different-port)
 - [Global Error Handler](#global-error-handler)
@@ -95,6 +98,27 @@ app.get("/static/*", (c) => {
   const file = c.params["*"] // contains matched remainder
   return c.text(`static file: ${file}`)
 })
+```
+
+### Sub-routers & `app.route()`
+
+You can structure your application by splitting endpoints into sub-routers and mounting them using `app.route()`. Sub-routers inherit route prefixing and optional relic protection.
+
+```ts
+import { Tomoe, relic } from "tomoejs"
+
+// Sub-router
+const animeRouter = new Tomoe()
+animeRouter.get("/list", (c) => c.json(["FMA", "Hunter x Hunter"]))
+animeRouter.get("/:id", (c) => c.json({ id: c.param("id") }))
+
+const app = new Tomoe()
+
+// Mount with prefix. Accessible at `/api/anime/list` and `/api/anime/1`
+app.route("/api/anime", animeRouter)
+
+// Protect all sub-routes with a Relic during mount
+app.route("/admin/anime", authRelic, animeRouter)
 ```
 
 ---
@@ -244,6 +268,61 @@ app.scope("/admin", adminAccess, (r) => { ... })
 
 ---
 
+### Schema Validation Relics
+
+Tomoe provides first-class schema validation relics out-of-the-box supporting any library conforming to the [Standard Schema v1 specification](https://github.com/standard-schema/standard-schema) (like Zod, ArkType, Valibot) as well as TypeBox.
+
+These validation relics inject type-safe, parsed and cleaned inputs directly into context properties:
+- `relic.body(schema)` injects into `ctx.body`
+- `relic.query(schema)` injects into `ctx.query`
+- `relic.params(schema)` injects into `ctx.params` (overriding route path param typings)
+- `relic.headers(schema)` injects into `ctx.headers`
+
+If validation fails, Tomoe automatically responds with a `400 Bad Request` and details containing the validation issues (no need to write boilerplate try-catch blocks in your route handlers).
+
+#### Validation with Zod
+
+```ts
+import { relic } from "tomoejs"
+import { z } from "zod"
+
+const userSchema = z.object({
+  username: z.string().min(3),
+  email: z.string().email(),
+  role: z.enum(["admin", "user"]).optional()
+})
+
+const validateBody = relic.body(userSchema)
+
+app.post("/register", validateBody, (ctx) => {
+  // ctx.body is fully typed as: { username: string; email: string; role?: "admin" | "user" }
+  const { username, email } = ctx.body
+  return ctx.json({ username, email })
+})
+```
+
+#### Validation with TypeBox
+
+For TypeBox, Tomoe natively cleans and validates TypeBox schemas automatically:
+
+```ts
+import { relic } from "tomoejs"
+import { Type } from "@sinclair/typebox"
+
+const querySchema = Type.Object({
+  search: Type.String(),
+  limit: Type.Optional(Type.Integer())
+})
+
+app.get("/search", relic.query(querySchema), (ctx) => {
+  // ctx.query is typed with TypeBox schema properties
+  const { search, limit } = ctx.query
+  return ctx.json({ search, limit })
+})
+```
+
+---
+
 ### Scopes
 
 `app.scope()` creates a route group protected by a relic group. All routes inside are automatically prefixed and have type-safe access to the relic properties:
@@ -264,24 +343,52 @@ app.scope("/admin", adminAccess, (r) => {
 
 ### Error Handling
 
-Errors carry their own HTTP semantics. Define once, use everywhere.
+Tomoe supports a **Unified Scope-Aware Error Pipeline** which allows handling errors cleanly through functional return styles or standard exceptions. 
+
+#### Thrown vs Functional Errors
+Throwing exceptions in JavaScript is expensive because V8 collects the entire call stack. For expected domain errors (like auth failures, validation errors, or resource not found), Tomoe provides a zero-overhead functional error return:
 
 ```ts
-import { httpError, Unauthorized, Forbidden } from "tomoejs"
+import { relic, err, httpError, Unauthorized, NotFound } from "tomoejs"
 
-// Custom errors
+// 1. Defining custom errors with additional context
 const RateLimited = httpError(429, "Too many requests")
+const ValidationError = httpError(400, "Validation failed", { details: { reason: "Missing field" } })
+
+// 2. Functional return inside a relic
+const auth = relic("user", async (ctx) => {
+  const user = await verifyToken(ctx.req.headers.get("Authorization"))
+  if (!user) {
+    // Returns an Err result without throwing! Extremely fast.
+    return err(Unauthorized) 
+  }
+  return user
+})
+
+// 3. Functional return inside a route handler
+app.get("/user/:id", (ctx) => {
+  const user = db.find(ctx.param("id"))
+  if (!user) {
+    return err(NotFound) // Functional error return
+  }
+  return ctx.json(user)
+})
 ```
 
-When a relic returns `err(Unauthorized)`, Tomoe automatically responds with `{ "error": "Unauthorized" }` and status code `401`.
-
-#### Custom error behavior
-Use `onError` on scopes to override default JSON errors:
+#### Custom and Scope-Level Error Handlers
+You can override default error responses for specific HTTP status codes by registering custom handlers. If you register them within a scope using `r.onError(...)`, they will catch errors originating from **both relics and route handlers** within that scope:
 
 ```ts
-app.scope("/web", auth, (r) => {
-  r.onError(401, (ctx) => ctx.redirect("/login")) // redirects instead of JSON
-  r.get("/home", (ctx) => ctx.html("<h1>Home</h1>"))
+app.scope("/api/v1", authRelic, (r) => {
+  // Catch any 401 Unauthorized within this scope (from authRelic or handlers)
+  r.onError(401, (ctx) => {
+    return ctx.json({ status: "error", message: "Please authenticate" }, { status: 401 })
+  })
+
+  r.get("/profile", (ctx) => {
+    // If authRelic failed and returned err(Unauthorized), the onError(401) runs
+    return ctx.json(ctx.user)
+  })
 })
 ```
 
@@ -304,6 +411,51 @@ const adminAccess = unite(auth, orgRelic, adminOnly)
 ```
 
 If you call `use(auth)` but the route doesn't mount `auth` earlier in the chain, Tomoe will throw an error at **startup**, preventing buggy configurations from reaching production.
+
+---
+
+## E2E Client SDK
+
+Tomoe comes with a built-in client fetch wrapper (`createClient`) that inherits the exact type signature of your backend application. It matches endpoint paths, HTTP methods, headers, query parameters, route parameters, request body schemas, and typed responses.
+
+#### 1. Export your App Router type
+On your server entrypoint:
+
+```ts
+import { Tomoe, relic } from "tomoejs"
+import { z } from "zod"
+
+const app = new Tomoe()
+  .get("/posts/:id", (c) => {
+    return c.json({ id: c.param("id"), title: "Tomoe is awesome" })
+  })
+  .post("/posts", relic.body(z.object({ title: z.string() })), (c) => {
+    return c.json({ id: "123", title: c.body.title })
+  })
+
+export type AppRouter = typeof app
+```
+
+#### 2. Consume in client-side code
+Import the type and instantiate the client:
+
+```ts
+import { createClient } from "tomoejs"
+import type { AppRouter } from "./server"
+
+const client = createClient<AppRouter>("https://api.my-app.com")
+
+// GET request: route parameters are fully type-checked!
+const { data: post, status } = await client("/posts/:id").get({
+  params: { id: "123" }
+})
+console.log(post.title) // autocomplete and type validation works!
+
+// POST request: body validation matched against backend Zod schema!
+const { data: newPost, error } = await client("/posts").post({
+  body: { title: "Super Fast Web Apps" } // type-safe body input
+})
+```
 
 ---
 
