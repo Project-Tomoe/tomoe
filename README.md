@@ -134,7 +134,61 @@ app.get("/static/*", (ctx) => {
 
 ---
 
-### 2. Context (`Context`) API
+### 2. Request Body & Input Parsing (All Options)
+Unlike other frameworks that wrap request objects with custom classes, **Tomoe keeps the Request object 100% native** for maximum performance and zero-allocation overhead. You can parse incoming payloads using **Web Standard APIs (without Relics)** or **Contract-Driven Schema Validation (with Relics)**.
+
+#### A. The Native Web-Standard Way (Without Relics)
+Use native W3C Fetch stream-consumers directly on `ctx.req`. This is ideal when you don't need validation or want low-overhead streaming (e.g. file uploads):
+
+```ts
+app.post("/raw-payloads", async (ctx) => {
+  // 1. Parse JSON body manually
+  const jsonBody = await ctx.req.json()
+
+  // 2. Read raw string payload (useful for custom text/xml parsing)
+  const textBody = await ctx.req.text()
+
+  // 3. Parse standard url-encoded forms or multipart uploads
+  const formData = await ctx.req.formData()
+  const username = formData.get("username")
+  const avatar = formData.get("avatar") // File object
+
+  // 4. Consume raw binary array buffers or file blobs (stream-friendly)
+  const arrayBuffer = await ctx.req.arrayBuffer()
+  const blob = await ctx.req.blob()
+
+  return ctx.json({ ok: true })
+})
+```
+
+#### B. The Contract-Driven Way (With Relics)
+Mount schema relics to automatically parse, clean, and validate payloads at the gateway. **Whenever `ctx.body` exists in your handler, it is guaranteed to be statically typed and valid:**
+
+```ts
+import { relic } from "tomoejs"
+import { z } from "zod"
+
+const registerSchema = z.object({
+  username: z.string().min(3),
+  email: z.string().email(),
+})
+
+// Validation relics automatically inject 'ctx.body', 'ctx.query', 'ctx.params', or 'ctx.headers'
+app.post("/register", relic.body(registerSchema), (ctx) => {
+  // ctx.body is fully typed, autocomplete-ready, and 100% safe!
+  const { username, email } = ctx.body
+  return ctx.json({ status: "success", username })
+})
+```
+
+#### Why Tomoe Does Not Use Custom Request Wrappers (like Hono's `c.req`):
+1. **Zero Object Allocation**: Wrapping native requests on every call consumes unnecessary memory and puts garbage collection pressure on high-throughput servers. Tomoe executes at native C++ runtime speeds.
+2. **No Stream Locking**: Native `Request` bodies can only be read once. If a framework automatically reads it internally to populate a global `ctx.body`, it locks the stream, blocking developers from forwarding raw file streams to storage buckets (like AWS S3 or Cloudflare R2).
+3. **Graph Caching**: In Hono, wrappers cache parsed bodies because multiple middlewares run sequentially and might repeatedly read them. In Tomoe, relics compile into a dependency graph at startup. If multiple handlers or guards need the body, `relic.body()` resolves **exactly once**, caches it in the Relic store, and injects it—preventing locking without custom wrapper overhead.
+
+---
+
+### 3. Context (`Context`) API
 Handlers receive a fully typed `Context` object wrapping the standard `Request` and providing clean response utilities.
 
 * `ctx.req`: Standard `Request` object.
@@ -168,7 +222,7 @@ app.get("/cookies", (ctx) => {
 
 ---
 
-### 3. Relics & Guards (Contract Architecture)
+### 4. Relics & Guards (Contract Architecture)
 Instead of relying on standard unsafe middleware side-effects, declare explicit dependency chains.
 
 * **Relics**: Generate values and inject them into handler contexts.
@@ -209,7 +263,7 @@ app.scope("/admin", adminAccess, (router) => {
 
 ---
 
-### 4. Input Schema Validation
+### 5. Input Schema Validation
 Tomoe offers built-in schema validation relics supporting standard schema systems (Zod, Valibot, ArkType, TypeBox).
 
 ```ts
@@ -236,7 +290,7 @@ app.post("/posts", unite(relic.body(createPostSchema), relic.query(querySchema))
 
 ---
 
-### 5. Built-in Middlewares
+### 6. Built-in Middlewares
 Tomoe packages core production middlewares designed for extreme efficiency and OOM security:
 
 #### CORS
@@ -281,7 +335,7 @@ app.use(rateLimit({
 
 ---
 
-### 6. Interactive OpenAPI & Swagger UI docs
+### 7. Interactive OpenAPI & Swagger UI docs
 Tomoe automatically builds Swagger UI endpoints with support for circular schemas and Locked CDN resources.
 
 ```ts
@@ -293,14 +347,14 @@ const app = new Tomoe()
 swagger(app, {
   title: "Tomoe API Documentation",
   version: "1.0.0",
-  path: "/docs",
-  specPath: "/swagger.json"
+  path: "/docs",           // Swagger UI HTML endpoint
+  specPath: "/swagger.json" // OpenAPI spec JSON endpoint
 })
 ```
 
 ---
 
-### 7. End-to-End Type-Safe Client SDK
+### 8. End-to-End Type-Safe Client SDK
 Connect your frontend directly with complete static type safety:
 
 ```ts
@@ -328,7 +382,7 @@ const { data, error } = await client("/posts").post({
 
 ---
 
-### 8. Runtimes & Server Adapters
+### 9. Runtimes & Server Adapters
 
 #### Bun / Cloudflare Workers
 Export the application directly.
