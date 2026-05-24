@@ -43,7 +43,7 @@ export class Context<
   /**
    * Environment bindings from middleware.
    */
-  #env: Map<string, any>
+  #env: Record<string, any>
 
   /**
    * Route parameters extracted from path.
@@ -74,7 +74,7 @@ export class Context<
   ) {
     this.req = req
     this.#params = params
-    this.#env = new Map(Object.entries(env))
+    this.#env = { ...env }
     this.#relicStore = new Map()
 
     if (executionCtx) {
@@ -132,7 +132,7 @@ export class Context<
    * Used by middleware to attach data to the context.
    */
   set<K extends keyof E>(key: K, value: E[K]) {
-    this.#env.set(key as string, value)
+    this.#env[key as string] = value
   }
 
   /**
@@ -140,12 +140,12 @@ export class Context<
    * Type-safe: returns correct type based on Env generic.
    */
   get<K extends keyof E>(key: K): E[K] {
-    return this.#env.get(key as string)
+    return this.#env[key as string]
   }
 
   /** Get all environment variables */
   get env(): E {
-    return Object.fromEntries(this.#env) as E
+    return this.#env as E
   }
 
   // Relic store (internal — used by executor and scope proxy)
