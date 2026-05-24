@@ -20,6 +20,28 @@ export interface TypedResponse<T = any> extends Response {
   readonly __type?: T;
 }
 
+export interface CookieOptions {
+  domain?: string;
+  path?: string;
+  expires?: Date;
+  maxAge?: number;
+  httpOnly?: boolean;
+  secure?: boolean;
+  sameSite?: "Strict" | "Lax" | "None";
+}
+
+function serializeCookie(name: string, value: string, options: CookieOptions = {}): string {
+  let str = `${name}=${encodeURIComponent(value)}`;
+  if (options.domain) str += `; Domain=${options.domain}`;
+  if (options.path) str += `; Path=${options.path}`;
+  if (options.expires) str += `; Expires=${options.expires.toUTCString()}`;
+  if (options.maxAge !== undefined) str += `; Max-Age=${options.maxAge}`;
+  if (options.httpOnly) str += `; HttpOnly`;
+  if (options.secure) str += `; Secure`;
+  if (options.sameSite) str += `; SameSite=${options.sameSite}`;
+  return str;
+}
+
 /**
  * Environment bindings type — extended by middleware to add properties.
  */
@@ -75,6 +97,11 @@ export class Context<
    */
   private _executionCtx?: ExecutionContext
 
+  /**
+   * List of cookies queued to be set in responses.
+   */
+  private _cookiesToSet: Array<{ name: string; value: string; options?: CookieOptions | undefined }> = []
+
   constructor(
     req: Request,
     params: P = {} as P,
@@ -90,6 +117,25 @@ export class Context<
     if (executionCtx) {
       this._executionCtx = executionCtx
     }
+  }
+
+  /** Get a request cookie by name */
+  cookie(name: string): string | undefined {
+    const cookieHeader = this.req.headers.get("Cookie");
+    if (!cookieHeader) return undefined;
+    
+    const cookies = cookieHeader.split(";").reduce((acc, pair) => {
+      const [k, v] = pair.split("=").map((s) => s.trim());
+      if (k && v) acc[k] = decodeURIComponent(v);
+      return acc;
+    }, {} as Record<string, string>);
+    
+    return cookies[name];
+  }
+
+  /** Queue a cookie to be set on the response */
+  setCookie(name: string, value: string, options?: CookieOptions): void {
+    this._cookiesToSet.push({ name, value, options });
   }
 
 
@@ -212,18 +258,27 @@ export class Context<
 
 
 
+  private _injectHeaders(init?: ResponseInit): Headers {
+    const headers = new Headers(init?.headers);
+    for (const cookie of this._cookiesToSet) {
+      headers.append("Set-Cookie", serializeCookie(cookie.name, cookie.value, cookie.options));
+    }
+    return headers;
+  }
+
   /**
    * JSON response.
    * Sets Content-Type: application/json automatically.
    */
   json<T = any>(data: T, init?: ResponseInit): TypedResponse<T> {
+    const headers = this._injectHeaders(init);
+    if (!headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json; charset=utf-8");
+    }
     return new Response(JSON.stringify(data), {
       status: 200,
       ...init,
-      headers: {
-        "Content-Type": "application/json; charset=utf-8",
-        ...init?.headers,
-      },
+      headers,
     }) as TypedResponse<T>
   }
 
@@ -231,13 +286,14 @@ export class Context<
    * Plain text response.
    */
   text(text: string, init?: ResponseInit): Response {
+    const headers = this._injectHeaders(init);
+    if (!headers.has("Content-Type")) {
+      headers.set("Content-Type", "text/plain; charset=utf-8");
+    }
     return new Response(text, {
       status: 200,
       ...init,
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        ...init?.headers,
-      },
+      headers,
     })
   }
 
@@ -248,13 +304,14 @@ export class Context<
    * Escape user data before passing to this method.
    */
   html(html: string, init?: ResponseInit): Response {
+    const headers = this._injectHeaders(init);
+    if (!headers.has("Content-Type")) {
+      headers.set("Content-Type", "text/html; charset=utf-8");
+    }
     return new Response(html, {
       status: 200,
       ...init,
-      headers: {
-        "Content-Type": "text/html; charset=utf-8",
-        ...init?.headers,
-      },
+      headers,
     })
   }
 
@@ -263,9 +320,11 @@ export class Context<
    * Default: 302 (temporary). Pass 301 for permanent.
    */
   redirect(url: string, status: 301 | 302 = 302): Response {
+    const headers = this._injectHeaders();
+    headers.set("Location", url);
     return new Response(null, {
       status,
-      headers: { Location: url },
+      headers,
     })
   }
 

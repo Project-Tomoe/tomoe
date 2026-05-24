@@ -210,7 +210,10 @@ export function generateOpenApiDoc(routes: any[], options: SwaggerOptions = {}):
     const headersRelic = relics.find((r: any) => r._kind === "providing" && r.name === "headers");
 
     const operation: any = {
-      summary: `${route.method} ${route.path}`,
+      summary: route.options?.summary || `${route.method} ${route.path}`,
+      description: route.options?.description,
+      tags: route.options?.tags,
+      deprecated: route.options?.deprecated,
       parameters: [] as any[],
       responses: {
         "200": {

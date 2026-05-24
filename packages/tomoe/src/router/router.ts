@@ -23,6 +23,13 @@ export type RouteRecord = {
   response: any;
 };
 
+export interface RouteOptions {
+  summary?: string;
+  description?: string;
+  tags?: string[];
+  deprecated?: boolean;
+}
+
 export type RelicContext<R> = R extends RelicGroup<any, infer Ctx>
   ? Ctx
   : R extends ProvidingRelic<infer Name, infer T>
@@ -245,7 +252,7 @@ export class Router<
 > {
   #tree: RadixTree
   #middlewares: Array<{ path: string; handler: Middleware }>
-  #routes: Array<{ method: HTTPMethod; path: string; handler: Handler; relics?: AnyRelic[] }>
+  #routes: Array<{ method: HTTPMethod; path: string; handler: Handler; relics?: AnyRelic[]; options?: RouteOptions | undefined }>
   #chainCache: Map<string, (c: Context, final: Handler) => any>
   #isCompiled = false
   #env: E
@@ -282,6 +289,7 @@ export class Router<
   get<Path extends string, Res = Response>(
     path: Path,
     handler: Handler<E, ParamsObject<Path>, {}, Res>,
+    options?: RouteOptions,
   ): Router<
     E,
     Routes & {
@@ -300,6 +308,7 @@ export class Router<
     path: Path,
     relics: RelicsInput,
     handler: Handler<E, ParamsObject<Path>, RelicContext<RelicsInput>, Res>,
+    options?: RouteOptions,
   ): Router<
     E,
     Routes & {
@@ -314,13 +323,14 @@ export class Router<
       };
     }
   >
-  get(path: string, relicsOrHandler: any, handler?: any): any {
-    return this.#method("GET", path, relicsOrHandler, handler)
+  get(path: string, relicsOrHandler: any, handler?: any, options?: RouteOptions): any {
+    return this.#method("GET", path, relicsOrHandler, handler, options)
   }
 
   post<Path extends string, Res = Response>(
     path: Path,
     handler: Handler<E, ParamsObject<Path>, {}, Res>,
+    options?: RouteOptions,
   ): Router<
     E,
     Routes & {
@@ -339,6 +349,7 @@ export class Router<
     path: Path,
     relics: RelicsInput,
     handler: Handler<E, ParamsObject<Path>, RelicContext<RelicsInput>, Res>,
+    options?: RouteOptions,
   ): Router<
     E,
     Routes & {
@@ -353,13 +364,14 @@ export class Router<
       };
     }
   >
-  post(path: string, relicsOrHandler: any, handler?: any): any {
-    return this.#method("POST", path, relicsOrHandler, handler)
+  post(path: string, relicsOrHandler: any, handler?: any, options?: RouteOptions): any {
+    return this.#method("POST", path, relicsOrHandler, handler, options)
   }
 
   put<Path extends string, Res = Response>(
     path: Path,
     handler: Handler<E, ParamsObject<Path>, {}, Res>,
+    options?: RouteOptions,
   ): Router<
     E,
     Routes & {
@@ -378,6 +390,7 @@ export class Router<
     path: Path,
     relics: RelicsInput,
     handler: Handler<E, ParamsObject<Path>, RelicContext<RelicsInput>, Res>,
+    options?: RouteOptions,
   ): Router<
     E,
     Routes & {
@@ -392,13 +405,14 @@ export class Router<
       };
     }
   >
-  put(path: string, relicsOrHandler: any, handler?: any): any {
-    return this.#method("PUT", path, relicsOrHandler, handler)
+  put(path: string, relicsOrHandler: any, handler?: any, options?: RouteOptions): any {
+    return this.#method("PUT", path, relicsOrHandler, handler, options)
   }
 
   delete<Path extends string, Res = Response>(
     path: Path,
     handler: Handler<E, ParamsObject<Path>, {}, Res>,
+    options?: RouteOptions,
   ): Router<
     E,
     Routes & {
@@ -417,6 +431,7 @@ export class Router<
     path: Path,
     relics: RelicsInput,
     handler: Handler<E, ParamsObject<Path>, RelicContext<RelicsInput>, Res>,
+    options?: RouteOptions,
   ): Router<
     E,
     Routes & {
@@ -431,13 +446,14 @@ export class Router<
       };
     }
   >
-  delete(path: string, relicsOrHandler: any, handler?: any): any {
-    return this.#method("DELETE", path, relicsOrHandler, handler)
+  delete(path: string, relicsOrHandler: any, handler?: any, options?: RouteOptions): any {
+    return this.#method("DELETE", path, relicsOrHandler, handler, options)
   }
 
   patch<Path extends string, Res = Response>(
     path: Path,
     handler: Handler<E, ParamsObject<Path>, {}, Res>,
+    options?: RouteOptions,
   ): Router<
     E,
     Routes & {
@@ -456,6 +472,7 @@ export class Router<
     path: Path,
     relics: RelicsInput,
     handler: Handler<E, ParamsObject<Path>, RelicContext<RelicsInput>, Res>,
+    options?: RouteOptions,
   ): Router<
     E,
     Routes & {
@@ -470,8 +487,8 @@ export class Router<
       };
     }
   >
-  patch(path: string, relicsOrHandler: any, handler?: any): any {
-    return this.#method("PATCH", path, relicsOrHandler, handler)
+  patch(path: string, relicsOrHandler: any, handler?: any, options?: RouteOptions): any {
+    return this.#method("PATCH", path, relicsOrHandler, handler, options)
   }
 
   /**
@@ -481,15 +498,23 @@ export class Router<
   #method<Path extends string, Ctx extends Record<string, any>>(
     method: HTTPMethod,
     path: Path,
-    relicsOrHandler: RelicInput<Ctx> | Handler<E, ParamsObject<Path>>,
-    handler?: Handler<E, ParamsObject<Path>, Ctx>,
+    relicsOrHandler: any,
+    handler?: any,
+    options?: RouteOptions,
   ): any {
-    const hasRelics = handler !== undefined
-    const actualHandler = hasRelics ? handler : (relicsOrHandler as Handler)
-    const relicsList = hasRelics ? normalizeRelics(relicsOrHandler as any).relics : []
+    let actualHandler: any
+    let relicsList: AnyRelic[] = []
+    let routeOptions: RouteOptions | undefined = undefined
 
-    if (hasRelics) {
-      const group = normalizeRelics(relicsOrHandler as any)
+    if (typeof relicsOrHandler === "function") {
+      actualHandler = relicsOrHandler
+      routeOptions = handler
+    } else {
+      actualHandler = handler
+      routeOptions = options
+      relicsList = normalizeRelics(relicsOrHandler).relics
+
+      const group = normalizeRelics(relicsOrHandler)
       const errors = validateRelicChain(group.relics, path)
       if (errors.length > 0) {
         throw new Error(`TomoeJS: Invalid relic configuration:\n${errors.join("\n")}`)
@@ -499,7 +524,7 @@ export class Router<
     // Inline routes have no scope-level onError — use empty map (default behavior)
     const emptyErrorHandlers = new Map<number, (ctx: Context<any, any, Ctx>) => Response>()
     const wrapped = wrapWithRelics(relicsList, actualHandler as any, emptyErrorHandlers)
-    this._registerRoute(method, path, wrapped as any, relicsList)
+    this._registerRoute(method, path, wrapped as any, relicsList, routeOptions)
     return this as any
   }
 
@@ -635,8 +660,8 @@ export class Router<
 
   // Internal
 
-  _registerRoute(method: HTTPMethod, path: string, handler: Handler, relics: AnyRelic[] = []): void {
-    this.#routes.push({ method, path, handler, relics })
+  _registerRoute(method: HTTPMethod, path: string, handler: Handler, relics: AnyRelic[] = [], options?: RouteOptions | undefined): void {
+    this.#routes.push({ method, path, handler, relics, options })
   }
 
   // Compile

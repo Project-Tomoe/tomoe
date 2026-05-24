@@ -29,7 +29,7 @@
 
 export { Tomoe, Router } from "./tomoe"
 
-export type { Handler, Middleware, HTTPMethod } from "./router/router"
+export type { Handler, Middleware, HTTPMethod, RouteOptions } from "./router/router"
 export { ScopedRouter } from "./router/router"
 
 export { Context, type TypedResponse } from "./context"
@@ -79,10 +79,17 @@ export type {
 //  Version 
 export const VERSION = "0.0.5"
 
+// Context types
+export type { CookieOptions } from "./context"
+
 // Middlewares
 export { cors } from "./middleware/cors"
 export type { CorsOptions } from "./middleware/cors"
 export { logger } from "./middleware/logger"
+export { csrf } from "./middleware/csrf"
+export type { CsrfOptions } from "./middleware/csrf"
+export { rateLimit } from "./middleware/rate-limit"
+export type { RateLimitOptions } from "./middleware/rate-limit"
 
 // Node Server Adapter
 export { createServer } from "./node"

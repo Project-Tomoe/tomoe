@@ -51,8 +51,14 @@ export default app
 
 - [Routing](#routing)
   - [Sub-routers & app.route()](#sub-routers--approute)
+  - [Route Options (OpenAPI Metadata)](#route-options-openapi-metadata)
 - [Context](#context)
+  - [Cookies](#cookies)
 - [Middleware](#middleware)
+  - [Logger Middleware](#logger-middleware)
+  - [CORS Middleware](#cors-middleware)
+  - [CSRF Middleware](#csrf-middleware)
+  - [Rate Limiting Middleware](#rate-limiting-middleware)
 - [Relics](#relics)
   - [Named Relics](#named-relics)
   - [Anonymous Relics](#anonymous-relics)
@@ -121,6 +127,19 @@ app.route("/api/anime", animeRouter)
 app.route("/admin/anime", authRelic, animeRouter)
 ```
 
+### Route Options (OpenAPI Metadata)
+
+You can pass a third argument to your route registrations to document metadata (like summaries, descriptions, tags, and deprecation flags) for the automatic Swagger UI:
+
+```ts
+app.get("/users/:id", handler, {
+  summary: "Get user by ID",
+  description: "Queries the database for user record by primary key.",
+  tags: ["Users"],
+  deprecated: false
+})
+```
+
 ---
 
 ## Context
@@ -157,6 +176,28 @@ app.get("/example/:id", (c) => {
   return c.redirect("/gone", 301)
   return c.notFound()
   return c.notFound("Custom 404 message")
+})
+```
+
+### Cookies
+
+Tomoe provides direct support for parsing and setting HTTP cookies. Cookies queued via `c.setCookie(...)` are automatically serialized and injected as `Set-Cookie` headers in any response helpers (like `c.json()`, `c.text()`, etc.).
+
+```ts
+app.get("/session", (c) => {
+  // 1. Read request cookie
+  const token = c.cookie("session_id")
+
+  // 2. Set response cookie
+  c.setCookie("theme", "dark", {
+    path: "/",
+    httpOnly: true,
+    secure: true,
+    maxAge: 604800, // 1 week
+    sameSite: "Lax"
+  })
+
+  return c.json({ session: token })
 })
 ```
 
@@ -208,6 +249,38 @@ app.use(cors({
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
   maxAge: 86400,
+}))
+```
+
+### CSRF Protection Middleware
+
+Tomoe includes standard host-matching CSRF (Cross-Site Request Forgery) protection middleware. It intercepts state-changing HTTP requests (POST, PUT, DELETE, PATCH) and verifies the `Origin`/`Referer` headers against the hosting server's target hostname:
+
+```ts
+import { csrf } from "tomoejs"
+
+// 1. Default (Matches Origin against Host header automatically)
+app.use(csrf())
+
+// 2. Allow custom trusted partner origins
+app.use(csrf({
+  origin: ["https://partner.com", "https://app.partner.com"]
+}))
+```
+
+### Rate Limiting Middleware
+
+Tomoe features an in-memory, sliding-window rate limiting middleware. It blocks traffic exceeding limits (returning a `429 Too Many Requests` status code), sets a standard `Retry-After` header in seconds, and appends remaining/limit statistics headers:
+
+```ts
+import { rateLimit } from "tomoejs"
+
+// Restricts requests to 100 per minute per IP address
+app.use(rateLimit({
+  windowMs: 60000,
+  max: 100,
+  // Custom IP resolver (optional, uses standard web headers by default)
+  keyGenerator: (c) => c.header("X-Real-IP") || "global"
 }))
 ```
 
