@@ -401,6 +401,16 @@ describe("Router", () => {
   /** Error Handling */
   describe("Error Handling", () => {
     it("should catch handler errors", async () => {
+      router.onError((err) => {
+        return new Response(
+          JSON.stringify({
+            error: "Internal Server Error",
+            message: err instanceof Error ? err.message : String(err),
+          }),
+          { status: 500, headers: { "Content-Type": "application/json; charset=utf-8" } }
+        );
+      });
+
       router.get("/error", (c) => {
         throw new Error("Error");
       });
@@ -415,6 +425,16 @@ describe("Router", () => {
     });
 
     it("should catch middleware errors", async () => {
+      router.onError((err) => {
+        return new Response(
+          JSON.stringify({
+            error: "Internal Server Error",
+            message: err instanceof Error ? err.message : String(err),
+          }),
+          { status: 500, headers: { "Content-Type": "application/json; charset=utf-8" } }
+        );
+      });
+
       const middleware: Middleware = (c, next) => {
         throw new Error("Middleware Error");
       };
