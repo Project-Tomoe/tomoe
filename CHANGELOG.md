@@ -4,9 +4,9 @@ All notable changes to the TomoeJS project will be documented in this file. This
 
 ---
 
-## [1.0.0-rc.1] - 2026-05-24
+## [1.0.0-rc.2] - 2026-05-24
 
-TomoeJS graduates to a complete, production-ready Release Candidate (`1.0.0-rc.1`)! This release brings a massive sweep of security hardening upgrades, routing optimizations, advanced middlewares, comprehensive validation enhancements, and a fully polished, zero-dependency web standard core.
+TomoeJS graduates to a complete, production-ready Release Candidate (`1.0.0-rc.2`)! This release brings a massive sweep of security hardening upgrades, routing optimizations, advanced middlewares, comprehensive validation enhancements, and a fully polished, zero-dependency web standard core.
 
 ### 🌸 The Power of Tomoe (Key Highlights)
 * **Contract-Driven Correctness**: Declared relics and guards are validated and compiled at startup (`app.compile()`), throwing immediately on broken dependency chains rather than crashing silently in production.
@@ -39,7 +39,7 @@ TomoeJS graduates to a complete, production-ready Release Candidate (`1.0.0-rc.1
 ---
 
 ### 🧪 Quality Assurance & Docs
-* **Exhaustive Test Coverage**: Added comprehensive automated integration test suites (`prod-features.test.ts` and `radix.test.ts`), passing **194 / 194 tests successfully**.
+* **Exhaustive Test Coverage**: Added comprehensive automated integration test suites (`prod-features.test.ts` and `radix.test.ts`), passing **196 / 196 tests successfully**.
 * **MIT Licensing**: Established standard root `LICENSE` file under the name of **Project-Tomoe Contributors**.
 * **Premium Error and Extension Documentation**: Rewrote and expanded the root `README.md` to document the complete table of pre-built error constants, direct `HttpError` instantiation with custom payload details, and OOP subclassing extensions.
 
