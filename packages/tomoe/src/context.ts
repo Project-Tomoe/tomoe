@@ -30,7 +30,12 @@ export interface CookieOptions {
   sameSite?: "Strict" | "Lax" | "None";
 }
 
+const COOKIE_NAME_REGEXP = /^[\x21\x23-\x27\x2A-\x2B\x2D-\x2E\x30-\x39\x41-\x5A\x5E-\x7A\x7C\x7E]+$/;
+
 function serializeCookie(name: string, value: string, options: CookieOptions = {}): string {
+  if (!COOKIE_NAME_REGEXP.test(name)) {
+    throw new Error(`Invalid cookie name "${name}". Cookie names can only contain valid US-ASCII characters according to RFC 6265.`);
+  }
   let str = `${name}=${encodeURIComponent(value)}`;
   if (options.domain) str += `; Domain=${options.domain}`;
   if (options.path) str += `; Path=${options.path}`;
@@ -102,6 +107,11 @@ export class Context<
    */
   private _cookiesToSet: Array<{ name: string; value: string; options?: CookieOptions | undefined }> = []
 
+  /**
+   * Cache of parsed request cookies.
+   */
+  private _parsedCookies: Record<string, string> | null = null
+
   constructor(
     req: Request,
     params: P = {} as P,
@@ -121,16 +131,25 @@ export class Context<
 
   /** Get a request cookie by name */
   cookie(name: string): string | undefined {
-    const cookieHeader = this.req.headers.get("Cookie");
-    if (!cookieHeader) return undefined;
-    
-    const cookies = cookieHeader.split(";").reduce((acc, pair) => {
-      const [k, v] = pair.split("=").map((s) => s.trim());
-      if (k && v) acc[k] = decodeURIComponent(v);
-      return acc;
-    }, {} as Record<string, string>);
-    
-    return cookies[name];
+    if (!this._parsedCookies) {
+      const cookieHeader = this.req.headers.get("Cookie");
+      if (!cookieHeader) {
+        this._parsedCookies = {};
+      } else {
+        this._parsedCookies = cookieHeader.split(";").reduce((acc, pair) => {
+          const [k, v] = pair.split("=").map((s) => s.trim());
+          if (k && v) {
+            try {
+              acc[k] = decodeURIComponent(v);
+            } catch {
+              acc[k] = v;
+            }
+          }
+          return acc;
+        }, {} as Record<string, string>);
+      }
+    }
+    return this._parsedCookies[name];
   }
 
   /** Queue a cookie to be set on the response */
