@@ -18,6 +18,18 @@
   <strong>Ultra-Fast · Contract-Driven · Compile-Time Type Safety · Zero-Dependency Web Standards Core</strong>
 </p>
 
+<p align="center">
+  <a href="#-what-is-tomoe">Philosophy</a> • 
+  <a href="#-the-power-of-tomoe">The Power</a> • 
+  <a href="#-core-features">Features</a> • 
+  <a href="#-installation">Installation</a> • 
+  <a href="#-quick-start">Quick Start</a> • 
+  <a href="#-complete-guide--api-reference">API Guide</a> • 
+  <a href="#7-custom--built-in-middlewares">Middlewares</a> • 
+  <a href="#8-scope-aware--unified-error-handling-functional--thrown">Errors</a> • 
+  <a href="#12-deployment--runtimes-deploy-anywhere">Deployment</a>
+</p>
+
 ---
 
 ## 🌸 What is Tomoe?
@@ -52,7 +64,7 @@ app.use(authMiddleware)
 app.get("/me", (c) => c.json(c.get("user"))) 
 ```
 
-Tomoe removes these assumptions entirely by introducing **Relics & Guards (Contract-Driven Architecture)**. If a route dependent on something (like a verified database user), that precondition must be explicitly declared as a contract. **If a contract isn't satisfied at startup, your application fails immediately rather than throwing runtime errors in production.**
+Tomoe removes these assumptions entirely by introducing **Relics & Guards (Contract-Driven Architecture)**. If a route handler depends on something (like a verified database user), that precondition must be explicitly declared as a contract. **If a contract isn't satisfied at startup, your application fails immediately rather than throwing runtime errors in production.**
 
 ```ts
 //   Context is fully typed, and ctx.user is guaranteed to exist at compile time and runtime!
