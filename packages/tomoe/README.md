@@ -14,6 +14,17 @@ Tomoe is a backend framework built on Web Standard APIs. It is fast by design an
 
 ---
 
+## 🌸 The Philosophy of Tomoe
+
+Tomoe is built on four core principles:
+
+1. **Correctness by Construction**: Backend stability shouldn't rely on developer memory. If a route handler depends on something (like a verified database user), that precondition must be declared as a contract. If a contract isn't satisfied at startup, your application fails immediately rather than throwing runtime errors in production.
+2. **Minimal Abstraction**: We do not invent custom wrappers around request or response objects. Tomoe runs directly on native Web Standard APIs (`Request` and `Response`), making it lightweight and natively portable across Bun, Cloudflare Workers, Node, and Deno.
+3. **Developer Delight (Zero-Boilerplate Type Safety)**: TypeScript shouldn't require you to write verbose generics on every route. By using return-type inference and JavaScript Proxies, Tomoe automatically propagates typed parameters from your data providers directly onto the context object (e.g. `ctx.user`) with zero configuration.
+4. **The Balance (巴)**: Tomoe represents the harmony between execution performance, strict type safety, and developer convenience.
+
+---
+
 ## Installation
 
 ```bash
@@ -42,8 +53,8 @@ export default app
 - [Context](#context)
 - [Middleware](#middleware)
 - [Relics](#relics)
-  - [Tokens](#tokens)
-  - [Providing Relics](#providing-relics)
+  - [Named Relics](#named-relics)
+  - [Anonymous Relics](#anonymous-relics)
   - [Guard Relics](#guard-relics)
   - [unite()](#unite)
   - [Scopes](#scopes)
@@ -51,6 +62,7 @@ export default app
   - [Relic Dependencies](#relic-dependencies)
 - [Compile](#compile)
 - [Different Port](#different-port)
+- [Global Error Handler](#global-error-handler)
 
 ---
 
@@ -66,20 +78,22 @@ app.delete("/anime/:id", handler)
 
 ### Path parameters
 
+Path parameter names are automatically parsed from the route string at compile-time and are fully typed:
+
 ```ts
 app.get("/anime/:name/character/:char", (c) => {
-  const name = c.param("name")  // typed — TS knows "name" exists
-  const char = c.param("char")  // typed — TS knows "char" exists
+  const name = c.param("name")  // typed string — autocomplete supported
+  const char = c.param("char")  // typed string — autocomplete supported
   return c.json({ name, char })
 })
 ```
 
-### Wildcard
+### Wildcards
 
 ```ts
 app.get("/static/*", (c) => {
-  // c.param("*") — the matched remainder
-  return c.text("static file")
+  const file = c.params["*"] // contains matched remainder
+  return c.text(`static file: ${file}`)
 })
 ```
 
@@ -107,7 +121,7 @@ app.get("/example/:id", (c) => {
   c.header("Authorization")      // string | null
 
   // Middleware env
-  c.get("user")                  // typed from middleware Env
+  c.get("requestId")             // typed from middleware Env
   c.set("requestId", "abc-123")
 
   // Responses
@@ -140,100 +154,74 @@ app.use("/anime/*", async (c, next) => {
   console.log("anime route hit")
   return next()
 })
-
-// Wrap — run logic before AND after handler
-app.use(async (c, next) => {
-  const start = Date.now()
-  const response = await next()
-  console.log(`${Date.now() - start}ms`)
-  return response
-})
-
-// Short-circuit — stop the request entirely
-app.use(async (c, next) => {
-  if (!c.header("X-Api-Key")) {
-    return c.json({ error: "Missing API key" }, { status: 401 })
-  }
-  return next()
-})
-```
-
-### Typed middleware
-
-```ts
-import type { Middleware } from "tomoejs"
-
-const authMiddleware: Middleware<{ user: User }> = async (c, next) => {
-  const user = await getUser(c.header("Authorization"))
-  c.set("user", user)
-  return next()
-}
-
-app.use(authMiddleware)
-
-app.get("/me", (c) => {
-  const user = c.get("user")  // typed as User
-  return c.json(user)
-})
 ```
 
 ---
 
 ## Relics
 
-Relics are Tomoe's answer to a real problem: middleware can't guarantee that what it provides actually exists when a handler needs it. You can register middleware in the wrong order, forget it on a route, and find out at runtime.
+Relics are Tomoe's answer to a real problem: traditional middleware cannot guarantee that what it provides actually exists when a handler runs. 
 
-Relics solve this with **explicit typed contracts**:
-- A relic declares what it **provides** (a typed token)
-- The framework validates the chain **at startup**
-- Handlers only receive what their relics guarantee
+Relics solve this with **explicit, compile-time validated contracts**.
 
-### Tokens
+### Named Relics
 
-A token is a typed unique identity. It's the contract between a relic that provides a value and a handler that consumes it.
-
-```ts
-import { token } from "tomoejs"
-
-const UserCtx = token<{ id: string; email: string; isAdmin: boolean }>("user")
-const OrgCtx  = token<{ orgId: string; plan: "free" | "pro" }>("org")
-```
-
-Tokens replace string keys entirely. No typos. Full autocomplete. The name is only for debug messages.
-
----
-
-### Providing Relics
-
-A providing relic runs async logic and binds the return value to a token.
+A named relic executes async logic, binds the return value to a property key, and merges it directly into the context object (`ctx`).
 
 ```ts
 import { relic, err, Unauthorized } from "tomoejs"
 
-const authRelic = relic(UserCtx, async (ctx) => {
+// 1. Define the relic (TypeScript infers the return type as User)
+const auth = relic("user", async (ctx) => {
   const token = ctx.req.headers.get("authorization")
   const user = await db.users.verify(token)
 
-  if (!user) return err(Unauthorized)  // signals error — stops chain
-  return user                           // success — bound to UserCtx
+  if (!user) return err(Unauthorized) // stops chain and responds
+  return user
+})
+
+// 2. Consume it (ctx.user is fully typed and guaranteed to be present)
+app.get("/me", auth, (ctx) => {
+  return ctx.json(ctx.user)
 })
 ```
 
-**No `ok()` wrapper needed.** Just return the value. Only errors need explicit marking with `err()`.
+No generic annotations or type casting. Type inference flows automatically from your return statement.
+
+---
+
+### Anonymous Relics
+
+If you prefer to avoid strings or naming properties, you can define anonymous relics. They are consumed by referencing the relic object directly in the handler:
+
+```ts
+// 1. Define anonymous relic
+const auth = relic(async (ctx) => {
+  const user = await db.users.verify(ctx.req.headers.get("authorization"))
+  if (!user) return err(Unauthorized)
+  return user
+})
+
+// 2. Consume by reference
+app.get("/me", auth, (ctx) => {
+  const user = ctx.relic(auth) // Statically typed as User
+  return ctx.json(user)
+})
+```
 
 ---
 
 ### Guard Relics
 
-A guard relic validates a condition but provides no value. It's a pure precondition check.
+Guards validate a condition but provide no data. They are pure precondition checks.
 
 ```ts
-import { relic, err, Forbidden } from "tomoejs"
+import { guard, err, Forbidden } from "tomoejs"
 
-const adminGuard = relic(async (ctx, use) => {
-  const user = use(UserCtx)              // resolves from earlier relic in chain
+// auth is a ProvidingRelic from above
+const adminOnly = guard(async (ctx, use) => {
+  const user = use(auth) // Resolves auth relic dependency
   if (!user.isAdmin) return err(Forbidden)
-  // return nothing — guards provide no value
 })
 ```
 
@@ -241,61 +229,34 @@ const adminGuard = relic(async (ctx, use) => {
 
 ### `unite()`
 
-`unite()` combines relics into a named, reusable access policy. Relics execute left to right.
+`unite()` combines multiple relics into a reusable access policy. Relics execute left-to-right.
 
 ```ts
 import { unite } from "tomoejs"
 
-// Define once
-const userAccess  = unite(authRelic)
-const adminAccess = unite(authRelic, orgRelic, adminGuard)
+const userAccess  = unite(auth)
+const adminAccess = unite(auth, orgRelic, adminOnly)
 
-// Reuse across as many scopes as needed
+// Reuse across scopes
 app.scope("/user",  userAccess,  (r) => { ... })
 app.scope("/admin", adminAccess, (r) => { ... })
-app.scope("/api",   userAccess,  (r) => { ... })
 ```
-
-`adminAccess` is a first-class value — name it, export it, share it across files.
 
 ---
 
 ### Scopes
 
-`app.scope()` creates a route group under a path prefix, protected by a relic group.
+`app.scope()` creates a route group protected by a relic group. All routes inside are automatically prefixed and have type-safe access to the relic properties:
 
 ```ts
-app.scope("/user", userAccess, (r) => {
-  r.get("/me", (ctx) => {
-    const user = ctx.relic(UserCtx)  // typed as User — guaranteed present
-    return ctx.json(user)
-  })
-
-  r.post("/settings", async (ctx) => {
-    const user = ctx.relic(UserCtx)
-    const body = await ctx.req.json()
-    await db.users.update(user.id, body)
-    return ctx.json({ updated: true })
-  })
-})
-
 app.scope("/admin", adminAccess, (r) => {
   r.get("/dashboard", (ctx) => {
-    const user = ctx.relic(UserCtx)  // typed as User
-    const org  = ctx.relic(OrgCtx)   // typed as Org
-    return ctx.json({ user, org })
+    // Both user and org properties are fully typed and accessible!
+    return ctx.json({
+      user: ctx.user,
+      org:  ctx.org,
+    })
   })
-})
-```
-
-Routes inside a scope are automatically prefixed. `/me` inside `/user` becomes `/user/me`.
-
-Public routes outside scopes are unaffected:
-
-```ts
-app.get("/health", (c) => c.text("ok"))  // no relics — runs freely
-app.scope("/private", userAccess, (r) => {
-  r.get("/data", (ctx) => ctx.text("protected"))
 })
 ```
 
@@ -306,143 +267,43 @@ app.scope("/private", userAccess, (r) => {
 Errors carry their own HTTP semantics. Define once, use everywhere.
 
 ```ts
-import { httpError, Unauthorized, Forbidden, NotFound } from "tomoejs"
-
-// Pre-built errors
-Unauthorized  // 401
-Forbidden     // 403
-NotFound      // 404
-BadRequest    // 400
-Conflict      // 409
+import { httpError, Unauthorized, Forbidden } from "tomoejs"
 
 // Custom errors
-const RateLimited = httpError(429, "Slow down")
-const Suspended   = httpError(403, "Account suspended")
+const RateLimited = httpError(429, "Too many requests")
 ```
 
-When a relic returns `err(Unauthorized)`, the framework automatically responds with:
-
-```json
-{ "error": "Unauthorized" }
-```
-
-with status `401`. **No `onError()` needed** unless you want non-default behavior.
+When a relic returns `err(Unauthorized)`, Tomoe automatically responds with `{ "error": "Unauthorized" }` and status code `401`.
 
 #### Custom error behavior
+Use `onError` on scopes to override default JSON errors:
 
 ```ts
-// Only write onError() when you want something different from the default JSON response
-app.scope("/web", userAccess, (r) => {
-  r.onError(401, (ctx) => ctx.redirect("/login"))  // redirect instead of JSON
+app.scope("/web", auth, (r) => {
+  r.onError(401, (ctx) => ctx.redirect("/login")) // redirects instead of JSON
   r.get("/home", (ctx) => ctx.html("<h1>Home</h1>"))
 })
 ```
-
-`onError()` only accepts status codes that the scope's relic chain can actually produce. If `401` isn't possible in this scope, it's a mistake — catch it in review, not production.
 
 ---
 
 ### Relic Dependencies
 
-Relics can depend on each other using `use()` inside the function. Calling `use(Token)` resolves the value provided by an earlier relic in the chain.
+Relics can depend on other relics by calling `use()` inside their handler.
 
 ```ts
-const orgRelic = relic(OrgCtx, async (ctx, use) => {
-  const user = use(UserCtx)            // UserCtx must be provided earlier in unite()
-  const org  = await db.orgs.forUser(user.id)
+const orgRelic = relic("org", async (ctx, use) => {
+  const user = use(auth) // 'auth' must appear before 'orgRelic' in the route chain
+  const org = await db.orgs.forUser(user.id)
   if (!org) return err(Forbidden)
   return org
 })
 
-// unite() order determines execution order
-// authRelic runs first → provides UserCtx → orgRelic can use(UserCtx)
-const adminAccess = unite(authRelic, orgRelic, adminGuard)
+// Correct unite order: auth provides context, orgRelic consumes it
+const adminAccess = unite(auth, orgRelic, adminOnly)
 ```
 
-If you call `use(UserCtx)` but no relic in the chain provides `UserCtx`, the framework throws at startup — not at request time.
-
----
-
-### Full Example
-
-```ts
-import {
-  Tomoe,
-  relic, token, unite,
-  err, httpError,
-  Unauthorized, Forbidden
-} from "tomoejs"
-
-// ── Tokens ──────────────────────────────────────────────────────
-const UserCtx = token<{ id: string; email: string; isAdmin: boolean }>("user")
-const OrgCtx  = token<{ orgId: string; plan: "free" | "pro" }>("org")
-
-// ── Errors ──────────────────────────────────────────────────────
-const Suspended = httpError(403, "Account suspended")
-
-// ── Relics ──────────────────────────────────────────────────────
-const authRelic = relic(UserCtx, async (ctx) => {
-  const user = await db.users.verify(ctx.req.headers.get("authorization"))
-  if (!user)           return err(Unauthorized)
-  if (user.suspended)  return err(Suspended)
-  return user
-})
-
-const orgRelic = relic(OrgCtx, async (ctx, use) => {
-  const user = use(UserCtx)
-  const org  = await db.orgs.forUser(user.id)
-  if (!org) return err(Forbidden)
-  return org
-})
-
-const adminGuard = relic(async (ctx, use) => {
-  const user = use(UserCtx)
-  if (!user.isAdmin) return err(Forbidden)
-})
-
-// ── Access policies ──────────────────────────────────────────────
-const adminAccess = unite(authRelic, orgRelic, adminGuard)
-
-// ── App ──────────────────────────────────────────────────────────
-const app = new Tomoe()
-
-// Global middleware
-app.use(async (c, next) => {
-  console.log(`[${c.req.method}] ${c.req.url}`)
-  return next()
-})
-
-// Public routes — no relics
-app.get("/health", (c) => c.text("ok"))
-app.get("/", (c) => c.html("<h1>Welcome</h1>"))
-
-// User routes — requires auth
-app.get("/me", authRelic, (ctx) => {
-    return ctx.json(ctx.relic(UserCtx))
-})
-
-// Admin routes — requires auth + org + admin flag
-app.scope("/admin", adminAccess, (r) => {
-  r.get("/dashboard", (ctx) => {
-    return ctx.json({
-      user: ctx.relic(UserCtx),
-      org:  ctx.relic(OrgCtx),
-    })
-  })
-})
-
-// Web routes — same auth, different error behavior
-app.scope("/web", authRelic, (r) => {
-  r.onError(401, (ctx) => ctx.redirect("/login"))
-  r.get("/home", (ctx) => {
-    const user = ctx.relic(UserCtx)
-    return ctx.html(`<h1>Welcome, ${user.email}</h1>`)
-  })
-})
-
-app.compile()
-export default app
-```
+If you call `use(auth)` but the route doesn't mount `auth` earlier in the chain, Tomoe will throw an error at **startup**, preventing buggy configurations from reaching production.
 
 ---
 
@@ -452,7 +313,7 @@ export default app
 app.compile()
 ```
 
-Calling `compile()` builds the optimized radix tree and middleware chains at startup. If you skip it, Tomoe compiles automatically on the first request. Explicit compile is recommended for production — you want startup errors (like invalid relic chains) to surface before serving traffic.
+`compile()` builds the backtracking radix tree and compiles middleware chains. If omitted, Tomoe compiles automatically on the first request. Explicit compilation is recommended in production so that configuration errors (such as invalid relic chains) throw immediately at startup.
 
 ---
 
@@ -473,9 +334,9 @@ export default {
 
 ## Global Error Handler
 
-By default, uncaught handler errors return `{ "error": "Internal Server Error" }` with status 500. No details leak to the client.
+By default, uncaught exceptions return `{ "error": "Internal Server Error" }` with a 500 status.
 
-Override for development:
+To customize this in development:
 
 ```ts
 app.onError((err, ctx) => {

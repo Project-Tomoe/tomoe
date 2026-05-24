@@ -12,6 +12,17 @@
 
 ---
 
+## 🌸 The Philosophy of Tomoe
+
+Tomoe is built on four core principles:
+
+1. **Correctness by Construction**: Backend stability shouldn't rely on developer memory. If a route handler depends on something (like a verified database user), that precondition must be declared as a contract. If a contract isn't satisfied at startup, your application fails immediately rather than throwing runtime errors in production.
+2. **Minimal Abstraction**: We do not invent custom wrappers around request or response objects. Tomoe runs directly on native Web Standard APIs (`Request` and `Response`), making it lightweight and natively portable across Bun, Cloudflare Workers, Node, and Deno.
+3. **Developer Delight (Zero-Boilerplate Type Safety)**: TypeScript shouldn't require you to write verbose generics on every route. By using return-type inference and JavaScript Proxies, Tomoe automatically propagates typed parameters from your data providers directly onto the context object (e.g. `ctx.user`) with zero configuration.
+4. **The Balance (巴)**: Tomoe represents the harmony between execution performance, strict type safety, and developer convenience.
+
+---
+
 ## Stop trusting middleware
 
 Most backend bugs come from one assumption:
@@ -26,7 +37,7 @@ Middleware makes that assumption easy — and wrong.
 
 Everything compiles.
 Everything deploys.
-Then it breaks.
+Then it breaks at runtime.
 
 ---
 
@@ -68,72 +79,69 @@ bun run index.ts
 Instead of *hoping* something exists:
 
 ```ts
+// ❌ Dangerous: 'user' might be undefined if middleware is misconfigured
 app.use(authMiddleware)
-app.get("/me", (c) => c.json(c.get("user"))) // maybe
+app.get("/me", (c) => c.json(c.get("user")))
 ```
 
 You define a contract:
 
 ```ts
-import { relic, token, unite, err, Unauthorized } from "tomoejs"
+import { relic, guard, err, Unauthorized, Forbidden } from "tomoejs"
 
-const UserCtx = token<{ id: string }>("user")
-
-const authRelic = relic(UserCtx, async (ctx) => {
+// 1. Define a providing relic (infers return type as User)
+const auth = relic("user", async (ctx) => {
   const user = await db.verify(ctx.req.headers.get("authorization"))
   if (!user) return err(Unauthorized)
   return user
 })
 
+// 2. Define a guard relic (validates a condition without providing values)
+const adminOnly = guard(async (ctx, use) => {
+  const user = use(auth) // Resolves auth relic dependency
+  if (!user.isAdmin) return err(Forbidden)
+})
 
-app.get("/me", authRelic, (ctx) => {
-    return ctx.json(ctx.relic(UserCtx)) // guaranteed
-  })
+// 3. Mount and consume (ctx.user is fully typed and guaranteed to exist!)
+app.get("/me", auth, (ctx) => {
+  return ctx.json(ctx.user) 
+})
 ```
 
 No guessing.
-No undefined.
-No order bugs.
+No undefined variables.
+No ordering bugs.
 
 ---
 
 ## Execution model
 
 ```
-Middleware → Relics → Handler
+Middleware ➡️ Relics ➡️ Handler
 ```
 
-* Middleware controls flow
-* Relics define required state
+* Middleware controls request flow (CORS, logging)
+* Relics define required state (auth, db queries)
 * Handlers stay pure
 
-Relics are validated at startup.
+Relics are validated and optimized at startup.
 
 ---
 
 ## What you get
 
-* Typed routing and params
+* Typed routing and parameters
 * Native Web API request/response
 * Composable middleware
-* Contract-based data flow (Relics)
+* Contract-based data flow (Relics & Guards)
 * Startup-time validation
+* Backtracking radix router
 
 ---
 
 ## Documentation
 
-[Read Documentation →](https://github.com/Project-Tomoe/tomoe/tree/main/packages/tomoe/README.md)
-
----
-
-## Why "Tomoe"?
-
-A *tomoe* (巴) represents balance — the same balance between:
-
-* performance
-* type safety
-* developer experience
+[Read Package Documentation ➡️](https://github.com/Project-Tomoe/tomoe/tree/main/packages/tomoe/README.md)
 
 ---
 
