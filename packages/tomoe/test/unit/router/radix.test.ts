@@ -325,7 +325,7 @@ describe("RadixTree", () => {
       tree.insert("GET", "/search/:query", h1);
 
       const match = tree.match("GET", "/search/hello%20world");
-      expect(match?.params).toEqual({ query: "hello%20world" });
+      expect(match?.params).toEqual({ query: "hello world" });
     });
 
     it("should return null for unmatched method", () => {

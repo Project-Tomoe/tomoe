@@ -187,7 +187,11 @@ export class RadixTree {
       if (paramName) {
         const result = this.#matchSegments(node.paramChild, segments, index + 1, method);
         if (result) {
-          result.params[paramName] = segment;
+          try {
+            result.params[paramName] = decodeURIComponent(segment);
+          } catch {
+            result.params[paramName] = segment;
+          }
           return result;
         }
       }
