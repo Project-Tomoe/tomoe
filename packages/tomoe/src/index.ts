@@ -32,8 +32,10 @@ export { Tomoe, Router } from "./tomoe"
 export type { Handler, Middleware, HTTPMethod } from "./router/router"
 export { ScopedRouter } from "./router/router"
 
-export { Context } from "./context"
+export { Context, type TypedResponse } from "./context"
 export type { Env, ExecutionContext } from "./context"
+export { createClient } from "./client"
+export type { Client } from "./client"
 
 
 // Relic definition

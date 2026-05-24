@@ -7,9 +7,12 @@
  */
 
 import type { Env } from "./context"
-import { Router } from "./router/router"
+import { Router, type RouteRecord } from "./router/router"
 
-export class Tomoe<E extends Env = Env> extends Router<E> {
+export class Tomoe<
+  E extends Env = Env,
+  Routes extends Record<string, Record<string, RouteRecord>> = {}
+> extends Router<E, Routes> {
   /**
    * Inspect the full dependency graph of all registered scopes.
    * Useful for testing and auditing route configurations.

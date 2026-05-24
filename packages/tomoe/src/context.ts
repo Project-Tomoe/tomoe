@@ -16,6 +16,10 @@
 import type { Prettify } from "./types/utils"
 import type { ProvidingRelic } from "./relic/relic"
 
+export interface TypedResponse<T = any> extends Response {
+  readonly __type?: T;
+}
+
 /**
  * Environment bindings type — extended by middleware to add properties.
  */
@@ -43,33 +47,33 @@ export class Context<
   /**
    * Environment bindings from middleware.
    */
-  #env: Record<string, any>
+  private _env: Record<string, any>
 
   /**
    * Route parameters extracted from path.
    */
-  #params: P
+  private _params: P
 
   /**
    * Relic store — populated by the executor before the handler runs.
    * Keyed by Relic._id (Symbol) for collision-free access.
    */
-  #relicStore: Map<symbol, any>
+  private _relicStore: Map<symbol, any>
 
   /**
    * Relic store by name — populated by executor for named relics.
    */
-  #relicStoreByName: Map<string, any>
+  private _relicStoreByName: Map<string, any>
 
   /**
    * Cached parsed URL — avoids repeated new URL() calls.
    */
-  #url: URL | null = null
+  private _url: URL | null = null
 
   /**
    * Execution context (Cloudflare Workers specific).
    */
-  #executionCtx?: ExecutionContext
+  private _executionCtx?: ExecutionContext
 
   constructor(
     req: Request,
@@ -78,20 +82,20 @@ export class Context<
     executionCtx?: ExecutionContext,
   ) {
     this.req = req
-    this.#params = params
-    this.#env = { ...env }
-    this.#relicStore = new Map()
-    this.#relicStoreByName = new Map()
+    this._params = params
+    this._env = { ...env }
+    this._relicStore = new Map()
+    this._relicStoreByName = new Map()
 
     if (executionCtx) {
-      this.#executionCtx = executionCtx
+      this._executionCtx = executionCtx
     }
   }
 
 
-  get #parsedUrl(): URL {
-    if (!this.#url) this.#url = new URL(this.req.url)
-    return this.#url
+  get _parsedUrl(): URL {
+    if (!this._url) this._url = new URL(this.req.url)
+    return this._url
   }
 
   /**
@@ -99,12 +103,12 @@ export class Context<
    * Type-safe: parameter names inferred from route path.
    */
   param<K extends keyof P>(key: K): P[K] {
-    return this.#params[key]
+    return this._params[key]
   }
 
   /** Get all route parameters */
   get params(): Prettify<P> {
-    return this.#params as Prettify<P>
+    return this._params as Prettify<P>
   }
 
   /**
@@ -112,13 +116,13 @@ export class Context<
    * URL is parsed once and cached.
    */
   query(key: string): string | undefined {
-    return this.#parsedUrl.searchParams.get(key) ?? undefined
+    return this._parsedUrl.searchParams.get(key) ?? undefined
   }
 
   /** Get all query parameters as an object */
   get queries(): Record<string, string> {
     const res: Record<string, string> = {}
-    for (const [key, value] of this.#parsedUrl.searchParams) {
+    for (const [key, value] of this._parsedUrl.searchParams) {
       res[key] = value
     }
     return res
@@ -138,7 +142,7 @@ export class Context<
    * Used by middleware to attach data to the context.
    */
   set<K extends keyof E>(key: K, value: E[K]) {
-    this.#env[key as string] = value
+    this._env[key as string] = value
   }
 
   /**
@@ -146,12 +150,12 @@ export class Context<
    * Type-safe: returns correct type based on Env generic.
    */
   get<K extends keyof E>(key: K): E[K] {
-    return this.#env[key as string]
+    return this._env[key as string]
   }
 
   /** Get all environment variables */
   get env(): E {
-    return this.#env as E
+    return this._env as E
   }
 
   // Relic store (internal — used by executor and scope proxy)
@@ -161,21 +165,21 @@ export class Context<
    * Called by the relic executor — not for user use.
    */
   _setRelic(id: symbol, value: any): void {
-    this.#relicStore.set(id, value)
+    this._relicStore.set(id, value)
   }
 
   /**
    * Internal: store a relic-provided value by relic name.
    */
   _setRelicByName(name: string, value: any): void {
-    this.#relicStoreByName.set(name, value)
+    this._relicStoreByName.set(name, value)
   }
 
   /**
    * Internal: retrieve a relic-provided value by relic name.
    */
   _getRelicByName(name: string): any {
-    return this.#relicStoreByName.get(name)
+    return this._relicStoreByName.get(name)
   }
 
   /**
@@ -183,7 +187,7 @@ export class Context<
    * Called by the relic executor.
    */
   _getRelic(id: symbol): any {
-    return this.#relicStore.get(id)
+    return this._relicStore.get(id)
   }
 
   /**
@@ -194,7 +198,7 @@ export class Context<
    * const user = ctx.relic(auth)  // typed as User
    */
   relic<T>(targetRelic: ProvidingRelic<any, T>): T {
-    const value = this.#relicStore.get(targetRelic._id)
+    const value = this._relicStore.get(targetRelic._id)
 
     if (value === undefined) {
       throw new Error(
@@ -207,11 +211,12 @@ export class Context<
   }
 
 
+
   /**
    * JSON response.
    * Sets Content-Type: application/json automatically.
    */
-  json<T = any>(data: T, init?: ResponseInit): Response {
+  json<T = any>(data: T, init?: ResponseInit): TypedResponse<T> {
     return new Response(JSON.stringify(data), {
       status: 200,
       ...init,
@@ -219,7 +224,7 @@ export class Context<
         "Content-Type": "application/json; charset=utf-8",
         ...init?.headers,
       },
-    })
+    }) as TypedResponse<T>
   }
 
   /**
@@ -277,7 +282,7 @@ export class Context<
    * Used for ctx.waitUntil() for background tasks.
    */
   get executionCtx(): ExecutionContext | undefined {
-    return this.#executionCtx
+    return this._executionCtx
   }
 }
 

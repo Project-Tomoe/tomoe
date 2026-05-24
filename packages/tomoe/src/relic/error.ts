@@ -18,16 +18,21 @@
 
 export class HttpError extends Error {
     readonly status: number;
+    readonly details?: any;
 
-    constructor(status: number, message?: string) {
+    constructor(status: number, message?: string, details?: any) {
         super(message ?? defaultMessage(status));
         this.name = "HttpError";
         this.status = status;
+        this.details = details;
     }
 
     toResponse(): Response {
+        const body = this.details
+            ? { error: this.message, ...this.details }
+            : { error: this.message };
         return new Response(
-            JSON.stringify({ error: this.message }),
+            JSON.stringify(body),
             {
                 status: this.status,
                 headers: { "Content-Type": "application/json; charset=utf-8" },

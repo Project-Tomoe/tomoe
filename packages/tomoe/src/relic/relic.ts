@@ -1,4 +1,7 @@
 import type { Err } from "./result";
+import type { StandardSchemaV1, InferSchemaOutput } from "../types/standard-schema";
+import { err } from "./result";
+import { HttpError } from "./error";
 
 /**
  * The `use` resolver passed into relic and guard functions.
@@ -45,22 +48,23 @@ export interface GuardRelic {
 
 export type AnyRelic = ProvidingRelic<any, any> | GuardRelic;
 
-/**
- * Create an anonymous providing relic — runs fn, provides value accessed via relic reference.
- */
-export function relic<T>(
-  fn: ProvidingRelicFn<T>
-): ProvidingRelic<never, T>;
+export interface RelicFactory {
+  /** Create an anonymous providing relic — runs fn, provides value accessed via relic reference. */
+  <T>(fn: ProvidingRelicFn<T>): ProvidingRelic<never, T>;
+  /** Create a named providing relic — runs fn, binds return value to a context property. */
+  <Name extends string, T>(name: Name, fn: ProvidingRelicFn<T>): ProvidingRelic<Name, T>;
+  
+  /** Validate JSON request body. Injects parsed value into ctx.body. */
+  body<S extends StandardSchemaV1>(schema: S): ProvidingRelic<"body", InferSchemaOutput<S>>;
+  /** Validate URL query parameters. Injects parsed value into ctx.query. */
+  query<S extends StandardSchemaV1>(schema: S): ProvidingRelic<"query", InferSchemaOutput<S>>;
+  /** Validate route path parameters. Injects parsed value into ctx.params. */
+  params<S extends StandardSchemaV1>(schema: S): ProvidingRelic<"params", InferSchemaOutput<S>>;
+  /** Validate request headers. Injects parsed value into ctx.headers. */
+  headers<S extends StandardSchemaV1>(schema: S): ProvidingRelic<"headers", InferSchemaOutput<S>>;
+}
 
-/**
- * Create a named providing relic — runs fn, binds return value to a context property.
- */
-export function relic<Name extends string, T>(
-  name: Name,
-  fn: ProvidingRelicFn<T>
-): ProvidingRelic<Name, T>;
-
-export function relic<Name extends string, T>(
+const relicImpl = function<Name extends string, T>(
   nameOrFn: Name | ProvidingRelicFn<T>,
   fn?: ProvidingRelicFn<T>
 ): AnyRelic {
@@ -85,7 +89,113 @@ export function relic<Name extends string, T>(
     name: nameOrFn,
     fn,
   };
+} as any;
+
+async function validateSchema<S extends StandardSchemaV1>(
+  schema: S,
+  value: unknown,
+  source: string
+) {
+  if (schema && typeof schema === "object" && "~standard" in schema) {
+    const result = await schema["~standard"].validate(value);
+    if (result.issues && result.issues.length > 0) {
+      return err(
+        new HttpError(400, `Validation Failed (${source})`, {
+          issues: result.issues.map((i) => ({
+            message: i.message,
+            path: i.path?.map((p) => (typeof p === "object" ? p.key : p)) || [],
+          })),
+        })
+      );
+    }
+    return result.value;
+  }
+  
+  if (schema && typeof schema === "object" && "safeParse" in schema && typeof (schema as any).safeParse === "function") {
+    const result = await (schema as any).safeParse(value);
+    if (!result.success) {
+      return err(
+        new HttpError(400, `Validation Failed (${source})`, {
+          issues: result.error.issues.map((i: any) => ({
+            message: i.message,
+            path: i.path || [],
+          })),
+        })
+      );
+    }
+    return result.data;
+  }
+
+  // TypeBox raw schema fallback (check for TypeBox hints/keys)
+  if (schema && typeof schema === "object" && ("type" in schema || Symbol.for("TypeBox.Kind") in schema)) {
+    try {
+      const { Value } = await import("@sinclair/typebox/value");
+      const errors = [...Value.Errors(schema, value)];
+      if (errors.length > 0) {
+        return err(
+          new HttpError(400, `Validation Failed (${source})`, {
+            issues: errors.map((e) => ({
+              message: e.message,
+              path: e.path ? e.path.split("/").filter(Boolean) : [],
+            })),
+          })
+        );
+      }
+      return Value.Clean(schema, value);
+    } catch (e) {
+      // TypeBox not loaded or value module missing
+    }
+  }
+
+  throw new Error(`Invalid schema passed to relic.${source}(). Must conform to Standard Schema or Zod interface.`);
 }
+
+export const relic: RelicFactory = Object.assign(relicImpl, {
+  body<S extends StandardSchemaV1>(schema: S) {
+    return relicImpl("body", async (ctx: RelicBaseCtx) => {
+      try {
+        const raw = await ctx.req.clone().json();
+        return validateSchema(schema, raw, "body");
+      } catch (e) {
+        return err(new HttpError(400, "Invalid JSON payload"));
+      }
+    });
+  },
+  query<S extends StandardSchemaV1>(schema: S) {
+    return relicImpl("query", async (ctx: RelicBaseCtx) => {
+      const url = new URL(ctx.req.url);
+      const raw: Record<string, string | string[]> = {};
+      for (const [key, value] of url.searchParams.entries()) {
+        if (key in raw) {
+          const existing = raw[key];
+          if (Array.isArray(existing)) {
+            existing.push(value);
+          } else {
+            raw[key] = [existing as string, value];
+          }
+        } else {
+          raw[key] = value;
+        }
+      }
+      return validateSchema(schema, raw, "query");
+    });
+  },
+  params<S extends StandardSchemaV1>(schema: S) {
+    return relicImpl("params", async (ctx: RelicBaseCtx) => {
+      const raw = (ctx as any).params || {};
+      return validateSchema(schema, raw, "params");
+    });
+  },
+  headers<S extends StandardSchemaV1>(schema: S) {
+    return relicImpl("headers", async (ctx: RelicBaseCtx) => {
+      const raw: Record<string, string> = {};
+      ctx.req.headers.forEach((value: string, key: string) => {
+        raw[key] = value;
+      });
+      return validateSchema(schema, raw, "headers");
+    });
+  }
+});
 
 /**
  * Create a guard relic — validates a condition, provides no value.
