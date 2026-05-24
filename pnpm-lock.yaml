@@ -29,6 +29,9 @@ importers:
       tomoejs:
         specifier: workspace:^
         version: link:../../packages/tomoe
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
 
   benchmarks:
     dependencies:
