@@ -14,6 +14,14 @@ export type UseResolver = <T>(relic: ProvidingRelic<any, T>) => T;
  */
 export interface RelicBaseCtx {
   req: Request;
+  /** Get request header (case-insensitive) */
+  header(name: string): string | null;
+  /** Get a request cookie by name */
+  cookie(name: string): string | undefined;
+  /** Get query parameter from URL */
+  query(key: string): string | undefined;
+  /** Get all query parameters as an object */
+  queries: Record<string, string>;
 }
 
 /**

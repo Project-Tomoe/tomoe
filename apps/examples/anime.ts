@@ -89,7 +89,7 @@ const dbRelic = relic("db", async () => {
 
 // 2. API Key Guard: asserts client is authorized before executing mutations
 const apiKeyGuard = guard(async (ctx) => {
-  const authHeader = ctx.req.headers.get("authorization")
+  const authHeader = ctx.header("authorization")
   
   if (!authHeader) {
     return err(Unauthorized) // Emits 401
