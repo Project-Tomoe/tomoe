@@ -654,7 +654,7 @@ swagger(app, {
 ---
 
 ### 10. Graph Inspection & Compilation
-For peak production performance, Tomoe compiles the entire backtracking radix tree and middleware chains at startup. This validates your relics dependency chains completely **before** accepting requests.
+Tomoe JS compiles the entire backtracking radix tree, validates Relic dependency contracts, and caches middleware onion runners at startup to deliver peak production speeds.
 
 ```ts
 const app = new Tomoe()
@@ -668,6 +668,15 @@ const graph = app.graph()
 console.log(`Routes registered: ${graph.routes.length}`)
 console.log(`Tree Max Depth: ${graph.stats.maxDepth}`)
 ```
+
+#### Do I have to call `app.compile()` manually?
+**No, calling it is completely optional.** 
+
+If you do not call `app.compile()` at startup, the native `fetch` getter will automatically detect this and trigger compilation behind the scenes on the **very first HTTP request** that hits the server.
+
+#### Why `app.compile()` is recommended in Production:
+* ⚡ **Eliminate Cold-Start Latency**: Serverless platforms (like Cloudflare Workers, AWS Lambda, or Vercel) incur process cold starts. Compiling at startup shifts the compilation time to process boot, ensuring the first HTTP request gets an immediate, pre-compiled response.
+* 🛡️ **Fail-Fast Safety**: Since Tomoe validates all Relic and Guard dependency trees during compilation, manual startup compilation ensures that **any invalid or broken contracts cause the server to crash instantly at launch** rather than waiting for a request to trigger a runtime failure.
 
 ---
 
