@@ -1,4 +1,4 @@
-import { type ChildProcess, spawn } from "node:child_process"
+import { type ChildProcess, spawn, spawnSync } from "node:child_process"
 import * as fs from "node:fs"
 import { createConnection } from "node:net"
 import * as path from "node:path"
@@ -23,12 +23,8 @@ interface Target {
 
 // Check if Bun is available in the environment
 function hasBun(): boolean {
-  try {
-    const res = spawn("bun", ["-v"])
-    return true
-  } catch {
-    return false
-  }
+  const res = spawnSync("bun", ["-v"], { stdio: "ignore" })
+  return res.status === 0
 }
 
 // Programmatically resolve framework versions from installed node_modules
@@ -168,6 +164,7 @@ async function runBenchmark() {
     { name: "TomoeJS (Bun)", file: "src/tomoe.ts", runtime: "bun" },
     { name: "TomoeJS (Node)", file: "src/tomoe.ts", runtime: "node" },
     { name: "Hono (Node)", file: "src/hono.ts", runtime: "node" },
+    { name: "Fastify (Node)", file: "src/fastify.ts", runtime: "node" },
     { name: "Express (Node)", file: "src/express.ts", runtime: "node" },
   ]
 
@@ -288,11 +285,11 @@ async function runBenchmark() {
 
   report += "## Summary of Findings\n"
   report +=
-    "1. **TomoeJS (Bun)** executes with extreme high-throughput, placing it side-by-side or ahead of frameworks like Hono and Elysia.\n"
+    "1. **TomoeJS (Bun)** should be evaluated against Hono and Elysia on the same host and runtime; inspect the per-scenario tables instead of relying on a single headline.\n"
   report +=
-    "2. **TomoeJS (Node)** runs significantly faster than legacy frameworks like Express due to its lightweight core and absence of dynamic middleware pipeline scans.\n"
+    "2. **TomoeJS (Node)** uses the Web Request/Response adapter path and must be judged against Express and Fastify from the measured results, not framework claims.\n"
   report +=
-    "3. **Pre-compiled Onion Execution** saves CPU cycles, resulting in better latency profiles on highly composed routes.\n\n"
+    "3. **Pre-compiled middleware execution** is expected to help composed routes, but production decisions should use repeated runs, raw output, and variance on the target deployment platform.\n\n"
   report += `*Generated automatically on ${new Date().toISOString().split("T")[0]}*`
 
   const reportPath = path.join(process.cwd(), "BENCHMARK.md")

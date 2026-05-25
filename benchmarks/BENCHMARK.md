@@ -10,7 +10,7 @@ This report lists the comparative performance benchmark results for **TomoeJS**,
 * **Bun version**: 1.3.3 (or equivalent local version)
 
 ### Exact Framework Versions Tested
-* **TomoeJS**: `v1.0.0-rc.1`
+* **TomoeJS**: `v1.0.0-rc.2`
 * **Hono**: `v4.12.22`
 * **Elysia**: `v1.4.28`
 * **Express**: `v5.2.1`
@@ -51,8 +51,10 @@ This report lists the comparative performance benchmark results for **TomoeJS**,
 | **TomoeJS (Node)** | 11,930 req/s | 7.9 ms | 14 ms |
 
 ## Summary of Findings
-1. **TomoeJS (Bun)** executes with extreme high-throughput, placing it side-by-side or ahead of frameworks like Hono and Elysia.
-2. **TomoeJS (Node)** runs significantly faster than legacy frameworks like Express due to its lightweight core and absence of dynamic middleware pipeline scans.
-3. **Pre-compiled Onion Execution** saves CPU cycles, resulting in better latency profiles on highly composed routes.
+1. **TomoeJS (Bun)** was competitive in these single-host, short-duration measurements, but the per-scenario tables should be treated as the source of truth.
+2. **TomoeJS (Node)** is slower than Express in this historical report because it uses the Web Request/Response adapter path on Node.
+3. **Pre-compiled middleware execution** remains the hypothesis to verify with repeated runs, raw output, variance, and target-platform measurements.
+
+> Note: the benchmark runner now includes Fastify. Re-run `pnpm --filter benchmarks run start` to generate a fresh report with the current framework set.
 
 *Generated automatically on 2026-05-24*
