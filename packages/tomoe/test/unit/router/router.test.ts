@@ -128,7 +128,7 @@ describe("Router", () => {
       expect(await response.text()).toBe("Not Found")
     })
 
-    it("should return 404 for wrong method", async () => {
+    it("should return 405 with Allow header for wrong method", async () => {
       router.get("/test", (c) => c.text("GET only"))
 
       const request = new Request("http://localhost/test", {
@@ -136,7 +136,21 @@ describe("Router", () => {
       })
       const response = await router.fetch(request)
 
-      expect(response.status).toBe(404)
+      expect(response.status).toBe(405)
+      expect(response.headers.get("Allow")).toBe("GET, HEAD, OPTIONS")
+    })
+
+    it("should support HEAD requests for GET routes without a response body", async () => {
+      router.get("/head-check", (c) => c.text("GET body"))
+
+      const request = new Request("http://localhost/head-check", {
+        method: "HEAD",
+      })
+      const response = await router.fetch(request)
+
+      expect(response.status).toBe(200)
+      expect(response.headers.get("Content-Type")).toBe("text/plain; charset=utf-8")
+      expect(await response.text()).toBe("")
     })
 
     it("should handle root route", async () => {

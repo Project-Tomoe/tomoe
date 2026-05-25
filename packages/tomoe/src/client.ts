@@ -13,10 +13,10 @@ export type Client<Routes extends Record<string, Record<string, RouteRecord>>> =
       headers?: Routes[Path][Method]["headers"]
       body?: Routes[Path][Method]["body"]
     } & (IsNever<Routes[Path][Method]["body"]> extends true
-      ? {}
+      ? Record<never, never>
       : { body: Routes[Path][Method]["body"] }) &
       (IsNever<Routes[Path][Method]["params"]> extends true
-        ? {}
+        ? Record<never, never>
         : { params: Routes[Path][Method]["params"] })
   ) => Promise<{
     data: Routes[Path][Method]["response"] extends { __type?: infer T } ? T : any
@@ -34,7 +34,7 @@ export type Client<Routes extends Record<string, Record<string, RouteRecord>>> =
  */
 export function createClient<R extends Router<any, any>>(
   baseUrl: string
-): Client<R extends Router<any, infer Routes> ? Routes : {}> {
+): Client<R extends Router<any, infer Routes> ? Routes : Record<never, never>> {
   const normalizedBase = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl
 
   return ((path: string) => {

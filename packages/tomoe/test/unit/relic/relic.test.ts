@@ -136,6 +136,13 @@ describe("unite()", () => {
     expect(group.relics[1]).toBe(org)
     expect(group.relics[2]).toBe(check)
   })
+
+  it("should flatten nested RelicGroups", () => {
+    const baseAccess = unite(auth, org)
+    const adminAccess = unite(baseAccess, check)
+
+    expect(adminAccess.relics).toEqual([auth, org, check])
+  })
 })
 
 // executeRelics()
@@ -308,6 +315,32 @@ describe("Router.scope() integration", () => {
     const body = await res.json()
     expect(body.user).toEqual({ id: "u1" })
     expect(body.org).toEqual({ orgId: "org-u1" })
+  })
+
+  it("should support nested unite() groups with additional route relics", async () => {
+    const auth = relic("user", async () => ({ id: "u1" }))
+    const db = relic("db", async () => ({
+      books: ["Dune", "Project Hail Mary"],
+    }))
+    const listQuery = relic("query", async () => ({ genre: "sci-fi" }))
+    const memberAccess = unite(auth, db)
+
+    router.get("/books", unite(memberAccess, listQuery), (ctx: any) => {
+      return ctx.json({
+        user: ctx.user,
+        books: ctx.db.books,
+        query: ctx.query,
+      })
+    })
+
+    const res = await router.fetch(new Request("http://localhost/books"))
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body).toEqual({
+      user: { id: "u1" },
+      books: ["Dune", "Project Hail Mary"],
+      query: { genre: "sci-fi" },
+    })
   })
 
   it("should throw at scope definition if relic chain is invalid (duplicate name)", () => {

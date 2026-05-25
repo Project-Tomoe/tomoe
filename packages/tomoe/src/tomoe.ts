@@ -11,7 +11,7 @@ import { type RouteRecord, Router } from "./router/router"
 
 export class Tomoe<
   E extends Env = Env,
-  Routes extends Record<string, Record<string, RouteRecord>> = {},
+  Routes extends Record<string, Record<string, RouteRecord>> = Record<never, never>,
 > extends Router<E, Routes> {
   /**
    * Inspect the full dependency graph of all registered scopes.

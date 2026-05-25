@@ -49,9 +49,19 @@ export function createServer(app: Router<any, any>) {
         res.statusMessage = webRes.statusText
       }
 
+      const setCookieHeaders =
+        typeof (webRes.headers as any).getSetCookie === "function"
+          ? (webRes.headers as any).getSetCookie()
+          : []
+
       webRes.headers.forEach((value, key) => {
+        if (key.toLowerCase() === "set-cookie" && setCookieHeaders.length > 0) return
         res.setHeader(key, value)
       })
+
+      if (setCookieHeaders.length > 0) {
+        res.setHeader("Set-Cookie", setCookieHeaders)
+      }
 
       if (webRes.body) {
         Readable.fromWeb(webRes.body as any).pipe(res)
