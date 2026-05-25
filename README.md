@@ -28,6 +28,9 @@ Inspired by the design of frameworks like **Hono** and **Elysia**, Tomoe embrace
 
 However, Tomoe addresses the single largest flaw in modern web frameworks: **unsafe, untyped middleware side-effects.**
 
+> [!IMPORTANT]
+> TomoeJS is currently a release candidate, not a stable 1.0 framework. Review the [production readiness checklist](docs/production-readiness.md), [deployment guide](docs/deployment.md), [release checklist](docs/release-checklist.md), and [security policy](SECURITY.md) before using it for critical services.
+
 ---
 
 ## 🌸 The Power of Tomoe
@@ -50,7 +53,7 @@ To ensure absolute honesty and fairness, we run scientific load tests using `Aut
 * **Node version**: `v24.13.0`
 * **Bun version**: `v1.3.3` (or equivalent local version)
 * **Framework Versions**:
-  - **TomoeJS**: `v1.0.0-rc.1`
+  - **TomoeJS**: `v1.0.0-rc.2`
   - **Hono**: `v4.12.22` (Latest stable release)
   - **Elysia**: `v1.4.28` (Latest stable release)
   - **Express**: `v5.2.1` (Latest major Express 5)
@@ -70,7 +73,7 @@ Measures baseline parsing, response writing dispatch, and simple static routing.
 | **TomoeJS (Node)** | 11,433 req/s | 8.25 ms | 22 ms |
 
 > [!NOTE]
-> **Honest Comparison**: In a pure serialization test, Hono (Bun) and Elysia (Bun) utilize their custom low-level C++ request handlers in JSC to deliver outstanding throughput. TomoeJS runs exceptionally fast and neck-and-neck, serving **36,789 req/s** natively on `Bun.serve`.
+> **Historical single-run result**: In this pure serialization test, Hono (Bun) and Elysia (Bun) led the table. TomoeJS served **36,789 req/s** natively on `Bun.serve`. TomoeJS on Node was slower than Express in this report because it uses the Web Request/Response adapter path.
 
 ### 2. Radix Dynamic Routing (`/user/:id/posts/:postId`)
 Tests parameter extraction speed, rad tree traversal, and URL path segment decoding.
@@ -100,7 +103,7 @@ Tests real-world middleware execution under composition (3 sequential middleware
 | **TomoeJS (Node)** | 11,930 req/s | 7.90 ms | 14 ms |
 
 > [!NOTE]
-> **Pre-compiled for real-world load**: TomoeJS is **30% faster than Hono (Bun)** under middleware composition! While Hono and Express search and bind middleware arrays dynamically on every incoming request, TomoeJS pre-computes and compiles route-level middleware execution lists **at startup**, saving massive execution cycles.
+> **Pre-compiled middleware**: TomoeJS led this single-run middleware scenario on Bun. Treat this as a benchmark hypothesis to verify on your target deployment platform with repeated runs and raw output, not as a universal guarantee.
 
 ---
 
@@ -133,7 +136,7 @@ app.get("/me", authRelic, (ctx) => {
 * 🛡️ **Contract-Driven Type Safety**: Declare requirements (Relics) and preconditions (Guards) at startup.
 * 📦 **Standard Schema Validation**: Built-in, high-performance validation (`body`, `query`, `params`, `headers`) supporting any standard validator schema (Zod, Valibot, ArkType, etc.) and TypeBox.
 * 🍪 **Robust Cookie API**: Lazy request cookie parsing cache and RFC 6265 cookie name validation shielding against injection attacks.
-* 🛡️ **Production-Ready Middlewares**: Built-in OOM-proof Rate Limiter, Reverse-Proxy friendly Host-matching CSRF middleware, CORS, and formatted console Logger.
+* 🛡️ **Production-Oriented Middlewares**: Built-in OOM-capped Rate Limiter, Reverse-Proxy friendly Host-matching CSRF middleware, CORS, and formatted console Logger.
 * 📝 **Auto-Generated OpenAPI & Swagger UI**: Serves interactive, self-documenting `/docs` with locked Swagger UI versions (`@5.18.2`) and CORS secure links.
 * 🔌 **E2E Path-Based Client SDK**: Enjoy complete static type-safety across frontend and backend.
 
@@ -185,7 +188,7 @@ bun run index.ts
 
 ## 🌸 Flagship Example Project
 
-To see a complete, fully featured blueprint built with TomoeJS, check out our **[Anime API Example](file:///C:/Users/saif/.gemini/antigravity/scratch/tomoe/apps/examples/anime.ts)** in the `apps/examples` directory.
+To see a complete, fully featured blueprint built with TomoeJS, check out our **[Anime API Example](apps/examples/anime.ts)** in the `apps/examples` directory.
 
 It demonstrates a comprehensive, real-world setup covering:
 * 🛡️ **Guards & Relics**: Injection of shared database contexts (`dbRelic`) and API authorization guards (`apiKeyGuard`) composed dynamically via `unite(...)`.
