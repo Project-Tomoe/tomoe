@@ -34,9 +34,9 @@ export type RelicContext<R> = R extends RelicGroup<any, infer Ctx>
   ? Ctx
   : R extends ProvidingRelic<infer Name, infer T>
     ? [Name] extends [never]
-      ? {}
+      ? Record<never, never>
       : { [K in Name]: T }
-    : {}
+    : Record<never, never>
 
 export type PrefixRoutes<
   Prefix extends string,
@@ -62,8 +62,8 @@ export type PrefixRoutes<
 
 export type Handler<
   E extends Env = Env,
-  P extends Record<string, string> = Record<string, never>,
-  R extends Record<string, any> = {},
+  P extends Record<string, string> = Record<never, never>,
+  R extends Record<string, any> = Record<never, never>,
   Res = Response,
 > = (c: Context<E, P, R> & R) => Res | Err | Promise<Res | Err>
 
@@ -177,7 +177,7 @@ function wrapWithRelics<P extends Record<string, string>, R extends Record<strin
  * A router scoped to a path prefix and relic group.
  * Returned to the builder callback in app.scope().
  */
-export class ScopedRouter<R extends Record<string, any> = {}> {
+export class ScopedRouter<R extends Record<string, any> = Record<never, never>> {
   #prefix: string
   #relics: AnyRelic[]
   #parent: Router<any>
@@ -282,7 +282,7 @@ export class ScopedRouter<R extends Record<string, any> = {}> {
 
 export class Router<
   E extends Env = Env,
-  Routes extends Record<string, Record<string, RouteRecord>> = {},
+  Routes extends Record<string, Record<string, RouteRecord>> = Record<never, never>,
 > {
   #tree: RadixTree
   #middlewares: Array<{ path: string; handler: Middleware }>
@@ -332,7 +332,7 @@ export class Router<
 
   get<Path extends string, Res = Response>(
     path: Path,
-    handler: Handler<E, ParamsObject<Path>, {}, Res>,
+    handler: Handler<E, ParamsObject<Path>, Record<never, never>, Res>,
     options?: RouteOptions
   ): Router<
     E,
@@ -373,7 +373,7 @@ export class Router<
 
   post<Path extends string, Res = Response>(
     path: Path,
-    handler: Handler<E, ParamsObject<Path>, {}, Res>,
+    handler: Handler<E, ParamsObject<Path>, Record<never, never>, Res>,
     options?: RouteOptions
   ): Router<
     E,
@@ -414,7 +414,7 @@ export class Router<
 
   put<Path extends string, Res = Response>(
     path: Path,
-    handler: Handler<E, ParamsObject<Path>, {}, Res>,
+    handler: Handler<E, ParamsObject<Path>, Record<never, never>, Res>,
     options?: RouteOptions
   ): Router<
     E,
@@ -455,7 +455,7 @@ export class Router<
 
   delete<Path extends string, Res = Response>(
     path: Path,
-    handler: Handler<E, ParamsObject<Path>, {}, Res>,
+    handler: Handler<E, ParamsObject<Path>, Record<never, never>, Res>,
     options?: RouteOptions
   ): Router<
     E,
@@ -496,7 +496,7 @@ export class Router<
 
   patch<Path extends string, Res = Response>(
     path: Path,
-    handler: Handler<E, ParamsObject<Path>, {}, Res>,
+    handler: Handler<E, ParamsObject<Path>, Record<never, never>, Res>,
     options?: RouteOptions
   ): Router<
     E,
@@ -754,9 +754,16 @@ export class Router<
 
   async #dispatch(request: Request, env?: any): Promise<Response> {
     const url = new URL(request.url)
-    let match = this.#tree.match(request.method, url.pathname)
+    const requestMethod = request.method.toUpperCase()
+    let match = this.#tree.match(requestMethod, url.pathname)
+    let shouldDropBody = false
 
-    if (!match && request.method === "OPTIONS") {
+    if (!match && requestMethod === "HEAD") {
+      match = this.#tree.match("GET", url.pathname)
+      shouldDropBody = Boolean(match)
+    }
+
+    if (!match && requestMethod === "OPTIONS") {
       const methods: HTTPMethod[] = ["GET", "POST", "PUT", "DELETE", "PATCH"]
       for (const m of methods) {
         match = this.#tree.match(m, url.pathname)
@@ -765,18 +772,48 @@ export class Router<
     }
 
     if (!match) {
+      const allowed = this.#allowedMethods(url.pathname)
+      if (allowed.length > 0) {
+        return new Response("Method Not Allowed", {
+          status: 405,
+          headers: { Allow: allowed.join(", ") },
+        })
+      }
       return new Response("Not Found", { status: 404 })
     }
 
     const context = new Context(request, match.params, env || this.#env)
 
     try {
-      return await match.handler(context)
+      const response = await match.handler(context)
+      if (shouldDropBody) {
+        return new Response(null, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers,
+        })
+      }
+      return response
     } catch (err) {
       if (err instanceof HttpError) return err.toResponse()
       console.error(err)
       return this.#errorHandler(err, context)
     }
+  }
+
+  #allowedMethods(pathname: string): string[] {
+    const allowed = new Set<string>()
+    const methods: HTTPMethod[] = ["GET", "POST", "PUT", "DELETE", "PATCH"]
+
+    for (const method of methods) {
+      if (this.#tree.match(method, pathname)) {
+        allowed.add(method)
+        if (method === "GET") allowed.add("HEAD")
+      }
+    }
+
+    if (allowed.size > 0) allowed.add("OPTIONS")
+    return [...allowed]
   }
 
   // Middleware chain helpers

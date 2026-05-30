@@ -63,9 +63,9 @@ export type Env = Record<string, any>
  *  - R: Relic context (from scope's unite() — populated at runtime)
  */
 export class Context<
-  E extends Env = {},
-  P extends Record<string, string> = {},
-  R extends Record<string, any> = {},
+  E extends Env = Record<never, never>,
+  P extends Record<string, string> = Record<never, never>,
+  R extends Record<string, any> = Record<never, never>,
 > {
   /**
    * Native Web Request object.

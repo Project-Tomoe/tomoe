@@ -14,6 +14,9 @@ importers:
       '@changesets/cli':
         specifier: ^2.27.9
         version: 2.29.7(@types/node@20.19.23)
+      tsx:
+        specifier: ^4.19.2
+        version: 4.22.3
       turbo:
         specifier: ^2.5.8
         version: 2.5.8
@@ -30,14 +33,23 @@ importers:
         specifier: workspace:^
         version: link:../../packages/tomoe
       zod:
-        specifier: ^3.24.1
-        version: 3.25.76
+        specifier: 3.24.1
+        version: 3.24.1
 
   benchmarks:
-    dependencies:
+    devDependencies:
       '@hono/node-server':
         specifier: latest
         version: 2.0.4(hono@4.12.22)
+      '@types/autocannon':
+        specifier: ^7.12.6
+        version: 7.12.7
+      '@types/express':
+        specifier: ^4.17.21
+        version: 4.17.25
+      '@types/node':
+        specifier: ^20.18.0
+        version: 20.19.23
       autocannon:
         specifier: ^7.15.0
         version: 7.15.0
@@ -56,16 +68,6 @@ importers:
       tsx:
         specifier: ^4.19.2
         version: 4.22.3
-    devDependencies:
-      '@types/autocannon':
-        specifier: ^7.12.6
-        version: 7.12.7
-      '@types/express':
-        specifier: ^4.17.21
-        version: 4.17.25
-      '@types/node':
-        specifier: ^20.18.0
-        version: 20.19.23
       typescript:
         specifier: ^5.9.2
         version: 5.9.3
@@ -73,8 +75,8 @@ importers:
   packages/tomoe:
     devDependencies:
       '@sinclair/typebox':
-        specifier: ^0.34.13
-        version: 0.34.49
+        specifier: 0.34.13
+        version: 0.34.13
       '@types/node':
         specifier: ^20.18.0
         version: 20.19.23
@@ -88,8 +90,8 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@20.19.23)(tsx@4.22.3)
       zod:
-        specifier: ^3.24.1
-        version: 3.25.76
+        specifier: 3.24.1
+        version: 3.24.1
 
 packages:
 
@@ -720,6 +722,9 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@sinclair/typebox@0.34.13':
+    resolution: {integrity: sha512-ceVKqyCEgC355Kw0s/0tyfY9MzMQINSykJ/pG2w6YnaZyrcjV48svZpr8lVZrYgWjzOmrIPBhQRAtr/7eJpA5g==}
+
   '@sinclair/typebox@0.34.49':
     resolution: {integrity: sha512-brySQQs7Jtn0joV8Xh9ZV/hZb9Ozb0pmazDIASBkYKCjXrXU3mpcFahmK/z4YDhGkQvP9mWJbVyahdtU5wQA+A==}
 
@@ -1188,6 +1193,7 @@ packages:
 
   glob@10.4.5:
     resolution: {integrity: sha512-7Bv8RF0k6xjo7d4A/PxYLbUCfb6c+Vpd2/mB2yRDlew7Jb5hEXiCD9ibfO7wpk8i4sevK6DFny9h7EYbM3/sHg==}
+    deprecated: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
     hasBin: true
 
   globby@11.1.0:
@@ -1913,8 +1919,8 @@ packages:
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
 
-  zod@3.25.76:
-    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
+  zod@3.24.1:
+    resolution: {integrity: sha512-muH7gBL9sI1nciMZV67X5fTKKBLtwpZ5VBp1vsOQzj1MhrBZ4wlVCm3gedKZWLp0Oyel8sIGfeiz54Su+OVT+A==}
 
 snapshots:
 
@@ -2414,6 +2420,8 @@ snapshots:
 
   '@rollup/rollup-win32-x64-msvc@4.52.5':
     optional: true
+
+  '@sinclair/typebox@0.34.13': {}
 
   '@sinclair/typebox@0.34.49': {}
 
@@ -3678,4 +3686,4 @@ snapshots:
 
   wrappy@1.0.2: {}
 
-  zod@3.25.76: {}
+  zod@3.24.1: {}

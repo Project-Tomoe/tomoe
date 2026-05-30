@@ -53,7 +53,8 @@ export function rateLimit(options: RateLimitOptions = {}): Middleware {
     timestamps = timestamps.filter((t) => now - t < windowMs)
 
     if (timestamps.length >= max) {
-      const retryAfter = Math.ceil((windowMs - (now - timestamps[0]!)) / 1000)
+      const oldest = timestamps[0]
+      const retryAfter = oldest === undefined ? 1 : Math.ceil((windowMs - (now - oldest)) / 1000)
       return new Response(JSON.stringify({ error: "Too Many Requests" }), {
         status: 429,
         headers: {

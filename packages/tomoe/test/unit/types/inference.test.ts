@@ -6,7 +6,9 @@
  */
 
 import { describe, expectTypeOf, it } from "vitest"
+import { relic, unite } from "../../../src"
 import type { ExtractParams, HasWildcard, IsStaticPath, ParamsObject } from "../../../src"
+import type { GroupContext } from "../../../src/relic/unite"
 
 describe("ExtractParams", () => {
   it("should extract no params from static path ", () => {
@@ -49,7 +51,7 @@ describe("ExtractParams", () => {
 describe("ParamsObject", () => {
   it("should return empty object for static path", () => {
     type Result = ParamsObject<"/tomoe">
-    expectTypeOf<Result>().toEqualTypeOf<{}>()
+    expectTypeOf<Result>().toEqualTypeOf<Record<never, never>>()
   })
 
   it("should create object with single param", () => {
@@ -106,5 +108,22 @@ describe("HasWildcard", () => {
   it("should return false for path without wildcard", () => {
     type Result = HasWildcard<"/stats/:statsId">
     expectTypeOf<Result>().toEqualTypeOf<false>()
+  })
+})
+
+describe("Nested unite() inference", () => {
+  it("should merge context from nested relic groups", () => {
+    const authRelic = relic("user", async () => ({ id: "u1" }))
+    const dbRelic = relic("db", async () => ({ connected: true }))
+    const queryRelic = relic("query", async () => ({ genre: "sci-fi" }))
+
+    const memberAccess = unite(authRelic, dbRelic)
+    const routeAccess = unite(memberAccess, queryRelic)
+
+    expectTypeOf<GroupContext<typeof routeAccess>>().toEqualTypeOf<{
+      user: { id: string }
+      db: { connected: boolean }
+      query: { genre: string }
+    }>()
   })
 })

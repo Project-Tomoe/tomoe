@@ -6,7 +6,7 @@ All notable changes to the TomoeJS project will be documented in this file. This
 
 ## [1.0.0-rc.2] - 2026-05-24
 
-TomoeJS graduates to a complete, production-ready Release Candidate (`1.0.0-rc.2`)! This release brings a massive sweep of security hardening upgrades, routing optimizations, advanced middlewares, comprehensive validation enhancements, and a fully polished, zero-dependency web standard core.
+TomoeJS continues as a production-readiness Release Candidate (`1.0.0-rc.2`). This release brings security hardening upgrades, routing optimizations, advanced middlewares, validation enhancements, and a zero-dependency web standard core. Treat it as an RC until the release gates in `docs/production-readiness.md` are complete.
 
 ### 🌸 The Power of Tomoe (Key Highlights)
 * **Contract-Driven Correctness**: Declared relics and guards are validated and compiled at startup (`app.compile()`), throwing immediately on broken dependency chains rather than crashing silently in production.

@@ -44,11 +44,11 @@ export type ExtractParams<
  *
  * Transform: "id" | "userId" -> {id: string; userId: string}
  *
- * note: if no params, returns {} (empty object)
+ * note: if no params, returns Record<never, never> (empty object)
  */
 
 export type ParamsObject<Path extends string> = ExtractParams<Path> extends never
-  ? {}
+  ? Record<never, never>
   : Prettify<{
       [K in ExtractParams<Path>]: string
     }>

@@ -8,7 +8,7 @@
   "scripts": {
     "start": "bun run anime.ts",
     "start:node": "npx tsx anime.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node -e \"console.log('No example tests configured')\""
   },
   "keywords": [],
   "author": "",
@@ -16,6 +16,6 @@
   "packageManager": "pnpm@10.6.5",
   "dependencies": {
     "tomoejs": "workspace:^",
-    "zod": "^3.24.1"
+    "zod": "3.24.1"
   }
 }
