@@ -2,7 +2,13 @@
  * Router - Core routing engine with middleware and relic scope support
  */
 
-import { Context, type Env } from "../context"
+import {
+  Context,
+  type Env,
+  type SocketCtx,
+  type WebSocketHandlers,
+  UpgradeResponse,
+} from "../context"
 import { HttpError } from "../relic/error"
 import { executeRelics, validateRelicChain } from "../relic/executor"
 import type { AnyRelic, ProvidingRelic } from "../relic/relic"
@@ -14,6 +20,18 @@ import type { ExtractFromRelics } from "../types/standard-schema"
 import { RadixTree } from "./radix"
 
 // Handler & Middleware types
+
+function getPathname(url: string): string {
+  const protoIndex = url.indexOf("://")
+  if (protoIndex === -1) {
+    const qIndex = url.indexOf("?")
+    return qIndex === -1 ? url : url.slice(0, qIndex)
+  }
+  const slashIndex = url.indexOf("/", protoIndex + 3)
+  if (slashIndex === -1) return "/"
+  const qIndex = url.indexOf("?", slashIndex)
+  return qIndex === -1 ? url.slice(slashIndex) : url.slice(slashIndex, qIndex)
+}
 
 export type RouteRecord = {
   params: any
@@ -244,6 +262,97 @@ export class ScopedRouter<R extends Record<string, any> = Record<never, never>> 
     return this.#register("PATCH", path, relicsOrHandler, handler)
   }
 
+  ws<Path extends string>(path: Path, handlers: WebSocketHandlers<any, ParamsObject<Path>, R>): this
+  ws<Path extends string, RelicsInput extends RelicInput>(
+    path: Path,
+    relics: RelicsInput,
+    handlers: WebSocketHandlers<any, ParamsObject<Path>, R & RelicContext<RelicsInput>>
+  ): this
+  ws(path: string, relicsOrHandlers: any, handlers?: any): this {
+    return this.#registerWS(path, relicsOrHandlers, handlers)
+  }
+
+  #registerWS(path: string, relicsOrHandlers: any, handlers?: any): this {
+    let actualHandlers: any
+    let combinedRelics = [...this.#relics]
+
+    if (
+      typeof relicsOrHandlers === "function" ||
+      (relicsOrHandlers && !("_kind" in relicsOrHandlers))
+    ) {
+      actualHandlers = relicsOrHandlers
+    } else {
+      actualHandlers = handlers
+      const localRelics = normalizeRelics(relicsOrHandlers).relics
+      combinedRelics = [...combinedRelics, ...localRelics]
+    }
+
+    const fullPath = `${this.#normalizedPrefix}${path === "/" ? "" : path}`
+
+    const rawHandler: Handler<any, any, any, any> = async (ctx) => {
+      const url = new URL(ctx.req.url)
+      const query: Record<string, string | string[]> = {}
+      for (const [key, value] of url.searchParams.entries()) {
+        if (key in query) {
+          const existing = query[key]
+          if (Array.isArray(existing)) {
+            existing.push(value)
+          } else {
+            query[key] = [existing as string, value]
+          }
+        } else {
+          query[key] = value
+        }
+      }
+
+      const headers: Record<string, string> = {}
+      ctx.req.headers.forEach((val: string, key: string) => {
+        headers[key] = val
+      })
+
+      const cookies: Record<string, string> = {}
+      const cookieHeader = ctx.req.headers.get("cookie")
+      if (cookieHeader) {
+        const parts = cookieHeader.split(";")
+        for (const part of parts) {
+          const [k, v] = part.split("=")
+          if (k && v) {
+            cookies[k.trim()] = decodeURIComponent(v.trim())
+          }
+        }
+      }
+
+      const sCtx: SocketCtx<any, any> = {
+        params: ctx.params || {},
+        query,
+        relics: {},
+        handshake: {
+          headers,
+          cookies,
+        },
+      }
+
+      const providingRelics = combinedRelics.filter((r) => r._kind === "providing")
+      for (const rel of providingRelics) {
+        if (rel.name) {
+          sCtx.relics[rel.name] = ctx._getRelicByName(rel.name)
+        }
+      }
+
+      if (actualHandlers.handshake) {
+        await actualHandlers.handshake(ctx)
+      }
+
+      return new UpgradeResponse(actualHandlers, sCtx, {
+        headers: ctx._injectHeaders(),
+      })
+    }
+
+    const wrapped = wrapWithRelics(combinedRelics, rawHandler, this.#errorHandlers)
+    this.#parent._registerRoute("GET", fullPath, wrapped as any, combinedRelics, undefined, true)
+    return this
+  }
+
   /**
    * Register a custom error handler for a specific HTTP status.
    * Only needed when you want non-default behavior.
@@ -292,6 +401,7 @@ export class Router<
     handler: Handler
     relics?: AnyRelic[]
     options?: RouteOptions | undefined
+    isWebSocket?: boolean
   }>
   #chainCache: Map<string, (c: Context, final: Handler) => any>
   #isCompiled = false
@@ -535,6 +645,130 @@ export class Router<
     return this.#method("PATCH", path, relicsOrHandler, handler, options)
   }
 
+  ws<Path extends string>(
+    path: Path,
+    handlers: WebSocketHandlers<any, ParamsObject<Path>, Record<never, never>>,
+    options?: RouteOptions
+  ): Router<
+    E,
+    Routes & {
+      [P in Path]: {
+        GET: {
+          params: ParamsObject<P>
+          query: never
+          body: never
+          headers: never
+          response: Response
+        }
+      }
+    }
+  >
+  ws<Path extends string, RelicsInput extends RelicInput>(
+    path: Path,
+    relics: RelicsInput,
+    handlers: WebSocketHandlers<any, ParamsObject<Path>, RelicContext<RelicsInput>>,
+    options?: RouteOptions
+  ): Router<
+    E,
+    Routes & {
+      [P in Path]: {
+        GET: {
+          params: ParamsObject<P>
+          query: ExtractFromRelics<RelicsInput, "query">
+          body: ExtractFromRelics<RelicsInput, "body">
+          headers: ExtractFromRelics<RelicsInput, "headers">
+          response: Response
+        }
+      }
+    }
+  >
+  ws(path: string, relicsOrHandlers: any, handlers?: any, options?: RouteOptions): any {
+    let actualHandlers: any
+    let relicsList: AnyRelic[] = []
+    let routeOptions = options
+
+    if (
+      typeof relicsOrHandlers === "function" ||
+      (relicsOrHandlers && !("_kind" in relicsOrHandlers))
+    ) {
+      actualHandlers = relicsOrHandlers
+      routeOptions = handlers
+    } else {
+      actualHandlers = handlers
+      relicsList = normalizeRelics(relicsOrHandlers).relics
+
+      const group = normalizeRelics(relicsOrHandlers)
+      const errors = validateRelicChain(group.relics, path)
+      if (errors.length > 0) {
+        throw new Error(`TomoeJS: Invalid relic configuration:\n${errors.join("\n")}`)
+      }
+    }
+
+    const rawHandler: Handler<any, any, any, any> = async (ctx) => {
+      const url = new URL(ctx.req.url)
+      const query: Record<string, string | string[]> = {}
+      for (const [key, value] of url.searchParams.entries()) {
+        if (key in query) {
+          const existing = query[key]
+          if (Array.isArray(existing)) {
+            existing.push(value)
+          } else {
+            query[key] = [existing as string, value]
+          }
+        } else {
+          query[key] = value
+        }
+      }
+
+      const headers: Record<string, string> = {}
+      ctx.req.headers.forEach((val: string, key: string) => {
+        headers[key] = val
+      })
+
+      const cookies: Record<string, string> = {}
+      const cookieHeader = ctx.req.headers.get("cookie")
+      if (cookieHeader) {
+        const parts = cookieHeader.split(";")
+        for (const part of parts) {
+          const [k, v] = part.split("=")
+          if (k && v) {
+            cookies[k.trim()] = decodeURIComponent(v.trim())
+          }
+        }
+      }
+
+      const sCtx: SocketCtx<any, any> = {
+        params: ctx.params || {},
+        query,
+        relics: {},
+        handshake: {
+          headers,
+          cookies,
+        },
+      }
+
+      const providingRelics = relicsList.filter((r) => r._kind === "providing")
+      for (const rel of providingRelics) {
+        if (rel.name) {
+          sCtx.relics[rel.name] = ctx._getRelicByName(rel.name)
+        }
+      }
+
+      if (actualHandlers.handshake) {
+        await actualHandlers.handshake(ctx)
+      }
+
+      return new UpgradeResponse(actualHandlers, sCtx, {
+        headers: ctx._injectHeaders(),
+      })
+    }
+
+    const emptyErrorHandlers = new Map<number, (ctx: Context<any, any, any>) => Response>()
+    const wrapped = wrapWithRelics(relicsList, rawHandler, emptyErrorHandlers)
+    this._registerRoute("GET", path, wrapped as any, relicsList, routeOptions, true)
+    return this as any
+  }
+
   /**
    * Shared implementation for all HTTP method registrations.
    * Detects whether relics were passed and wraps handler accordingly.
@@ -629,14 +863,26 @@ export class Router<
         const emptyErrorHandlers = new Map<number, (ctx: Context) => Response>()
         const wrapped = wrapWithRelics(group.relics, route.handler, emptyErrorHandlers)
         const combinedRelics = [...group.relics, ...(route.relics || [])]
-        return { ...route, handler: wrapped, relics: combinedRelics }
+        return {
+          ...route,
+          handler: wrapped,
+          relics: combinedRelics,
+          isWebSocket: route.isWebSocket,
+        }
       })
     }
 
     for (const route of wrappedRoutes) {
       const fullPath = `${prefix}${route.path === "/" ? "" : route.path}`
       const combinedRelics = route.relics || []
-      this._registerRoute(route.method, fullPath, route.handler, combinedRelics)
+      this._registerRoute(
+        route.method,
+        fullPath,
+        route.handler,
+        combinedRelics,
+        route.options,
+        route.isWebSocket
+      )
     }
 
     for (const mw of subRouter._middlewares) {
@@ -710,9 +956,10 @@ export class Router<
     path: string,
     handler: Handler,
     relics: AnyRelic[] = [],
-    options?: RouteOptions | undefined
+    options?: RouteOptions | undefined,
+    isWebSocket = false
   ): void {
-    this.#routes.push({ method, path, handler, relics, options })
+    this.#routes.push({ method, path, handler, relics, options, isWebSocket })
   }
 
   // Compile
@@ -753,26 +1000,26 @@ export class Router<
   }
 
   async #dispatch(request: Request, env?: any): Promise<Response> {
-    const url = new URL(request.url)
     const requestMethod = request.method.toUpperCase()
-    let match = this.#tree.match(requestMethod, url.pathname)
+    const pathname = getPathname(request.url)
+    let match = this.#tree.match(requestMethod, pathname)
     let shouldDropBody = false
 
     if (!match && requestMethod === "HEAD") {
-      match = this.#tree.match("GET", url.pathname)
+      match = this.#tree.match("GET", pathname)
       shouldDropBody = Boolean(match)
     }
 
     if (!match && requestMethod === "OPTIONS") {
       const methods: HTTPMethod[] = ["GET", "POST", "PUT", "DELETE", "PATCH"]
       for (const m of methods) {
-        match = this.#tree.match(m, url.pathname)
+        match = this.#tree.match(m, pathname)
         if (match) break
       }
     }
 
     if (!match) {
-      const allowed = this.#allowedMethods(url.pathname)
+      const allowed = this.#allowedMethods(pathname)
       if (allowed.length > 0) {
         return new Response("Method Not Allowed", {
           status: 405,
