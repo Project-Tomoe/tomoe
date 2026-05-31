@@ -6,8 +6,8 @@ import {
   Context,
   type Env,
   type SocketCtx,
-  type WebSocketHandlers,
   UpgradeResponse,
+  type WebSocketHandlers,
 } from "../context"
 import { HttpError } from "../relic/error"
 import { executeRelics, validateRelicChain } from "../relic/executor"

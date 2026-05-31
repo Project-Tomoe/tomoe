@@ -52,8 +52,12 @@ export class LazyResponse {
     return this._nativeRes ? this._nativeRes.bodyUsed : false
   }
 
-  arrayBuffer(): Promise<ArrayBuffer> { return this._getNative().arrayBuffer() }
-  blob(): Promise<Blob> { return this._getNative().blob() }
+  arrayBuffer(): Promise<ArrayBuffer> {
+    return this._getNative().arrayBuffer()
+  }
+  blob(): Promise<Blob> {
+    return this._getNative().blob()
+  }
   clone(): LazyResponse {
     const cloned = new LazyResponse(this._body, this._init)
     cloned._bodyStr = this._bodyStr
@@ -61,9 +65,15 @@ export class LazyResponse {
     cloned._cookies = this._cookies
     return cloned
   }
-  formData(): Promise<FormData> { return this._getNative().formData() }
-  json(): Promise<any> { return this._getNative().json() }
-  text(): Promise<string> { return this._getNative().text() }
+  formData(): Promise<FormData> {
+    return this._getNative().formData()
+  }
+  json(): Promise<any> {
+    return this._getNative().json()
+  }
+  text(): Promise<string> {
+    return this._getNative().text()
+  }
 }
 
 Object.setPrototypeOf(LazyResponse, Response)

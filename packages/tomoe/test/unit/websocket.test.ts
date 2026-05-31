@@ -1,9 +1,9 @@
+import { request as httpRequest } from "node:http"
 import { describe, expect, it, vi } from "vitest"
-import { Tomoe } from "../../src/tomoe"
-import { relic } from "../../src/relic/relic"
 import { UpgradeResponse } from "../../src/context"
 import { createServer } from "../../src/node"
-import { request as httpRequest } from "node:http"
+import { relic } from "../../src/relic/relic"
+import { Tomoe } from "../../src/tomoe"
 
 describe("WebSocket Routing & Handshake", () => {
   it("should register and match ws routes returning UpgradeResponse", async () => {
@@ -35,7 +35,7 @@ describe("WebSocket Routing & Handshake", () => {
     expect(sCtx.params).toEqual({ room: "lobby" })
     expect(sCtx.query).toEqual({ token: "abc" })
     expect(sCtx.handshake.headers["x-custom-header"]).toBe("hello")
-    expect(sCtx.handshake.cookies["session"]).toBe("xyz")
+    expect(sCtx.handshake.cookies.session).toBe("xyz")
   })
 
   it("should run relics before upgrading and reject on failure", async () => {

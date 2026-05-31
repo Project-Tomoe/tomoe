@@ -1,5 +1,5 @@
-import Fastify, { type FastifyRequest, type FastifyReply } from "fastify"
 import fastifyWebsocket from "@fastify/websocket"
+import Fastify, { type FastifyRequest, type FastifyReply } from "fastify"
 
 const app = Fastify({ logger: false })
 

@@ -408,7 +408,7 @@ async function runBenchmark() {
 
   const reportPath = path.join(process.cwd(), "BENCHMARK.md")
   fs.writeFileSync(reportPath, report)
-  console.log(`` + `\n✨ Benchmark Report saved perfectly to ${reportPath}!`)
+  console.log(`\n✨ Benchmark Report saved perfectly to ${reportPath}!`)
   console.log("--------------------------------------------------------------------------------")
   console.log(report)
   console.log("--------------------------------------------------------------------------------")

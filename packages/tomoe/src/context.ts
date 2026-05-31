@@ -13,9 +13,9 @@
  *  5. Relic store for typed scope context (populated by relic executor)
  */
 
+import { LazyResponse } from "./lazy-response"
 import type { ProvidingRelic } from "./relic/relic"
 import type { Prettify } from "./types/utils"
-import { LazyResponse } from "./lazy-response"
 
 export interface TypedResponse<T = any> extends Response {
   readonly __type?: T
@@ -254,7 +254,7 @@ export class Context<
    */
   header(name: string): string | null
   header(name: string, value: string): void
-  header(name: string, value?: string): string | null | void {
+  header(name: string, value?: string): string | null | undefined {
     if (value === undefined) {
       return this.req.headers.get(name)
     }
@@ -368,7 +368,7 @@ export class Context<
       )
       let serializedCookies: string[] | null = null
       if (this._cookiesToSet.length > 0) {
-        serializedCookies = this._cookiesToSet.map(cookie =>
+        serializedCookies = this._cookiesToSet.map((cookie) =>
           serializeCookie(cookie.name, cookie.value, cookie.options)
         )
       }
@@ -410,7 +410,7 @@ export class Context<
       )
       let serializedCookies: string[] | null = null
       if (this._cookiesToSet.length > 0) {
-        serializedCookies = this._cookiesToSet.map(cookie =>
+        serializedCookies = this._cookiesToSet.map((cookie) =>
           serializeCookie(cookie.name, cookie.value, cookie.options)
         )
       }
@@ -455,7 +455,7 @@ export class Context<
       )
       let serializedCookies: string[] | null = null
       if (this._cookiesToSet.length > 0) {
-        serializedCookies = this._cookiesToSet.map(cookie =>
+        serializedCookies = this._cookiesToSet.map((cookie) =>
           serializeCookie(cookie.name, cookie.value, cookie.options)
         )
       }
@@ -497,7 +497,7 @@ export class Context<
       )
       let serializedCookies: string[] | null = null
       if (this._cookiesToSet.length > 0) {
-        serializedCookies = this._cookiesToSet.map(cookie =>
+        serializedCookies = this._cookiesToSet.map((cookie) =>
           serializeCookie(cookie.name, cookie.value, cookie.options)
         )
       }

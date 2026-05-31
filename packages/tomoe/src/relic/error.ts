@@ -47,14 +47,14 @@ export class HttpError extends Error {
       res._bodyStr = bodyStr
       res._rawHeaders = {
         "content-type": "application/json; charset=utf-8",
-        "content-length": len.toString()
+        "content-length": len.toString(),
       }
     } else {
       res = new Response(bodyStr, {
         status: this.status,
         headers: {
           "Content-Type": "application/json; charset=utf-8",
-          "Content-Length": len.toString()
+          "Content-Length": len.toString(),
         },
       })
       res._bodyStr = bodyStr

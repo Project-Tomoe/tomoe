@@ -63,7 +63,8 @@ export class RadixTree {
     let last = 0
     const len = path.length
     for (let i = 0; i < len; i++) {
-      if (path.charCodeAt(i) === 47) { // '/'
+      if (path.charCodeAt(i) === 47) {
+        // '/'
         if (i > last) {
           segments.push(path.slice(last, i))
         }

@@ -1,4 +1,4 @@
-import { Tomoe, Unauthorized, createServer, err, relic, UpgradeResponse } from "tomoejs"
+import { Tomoe, Unauthorized, UpgradeResponse, createServer, err, relic } from "tomoejs"
 
 const app = new Tomoe()
 

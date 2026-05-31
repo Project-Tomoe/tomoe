@@ -103,11 +103,11 @@ export function createServer(app: Router<any, any>) {
       }
 
       const rawHeaders = (webRes as any)._headers ? null : (webRes as any)._rawHeaders
-      const setCookieHeaders = (webRes as any)._cookies || (
-        typeof (webRes.headers as any).getSetCookie === "function"
+      const setCookieHeaders =
+        (webRes as any)._cookies ||
+        (typeof (webRes.headers as any).getSetCookie === "function"
           ? (webRes.headers as any).getSetCookie()
-          : []
-      )
+          : [])
 
       if (rawHeaders) {
         for (const key in rawHeaders) {
@@ -211,7 +211,7 @@ export function createServer(app: Router<any, any>) {
           const handlers = upgradeRes.socketHandlers
           const sCtx = upgradeRes.socketCtx
 
-          const safeCall = (cb?: Function, ...args: any[]) => {
+          const safeCall = (cb?: (...args: any[]) => any, ...args: any[]) => {
             if (!cb) return
             try {
               cb(...args)
