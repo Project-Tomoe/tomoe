@@ -1,6 +1,6 @@
 {
   "name": "tomoejs",
-  "version": "1.0.0-rc.2",
+  "version": "1.0.0-rc.3",
   "description": "Tomoe — The art of perfect balance",
   "author": "Nanasi",
   "license": "MIT",
@@ -28,12 +28,14 @@
     "clean": "rm -rf dist"
   },
   "devDependencies": {
-    "vitest": "^3.2.4",
+    "@sinclair/typebox": "0.34.13",
+    "@types/node": "^20.18.0",
+    "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^3.2.4",
     "typescript": "^5.9.2",
-    "@types/node": "^20.18.0",
-    "zod": "3.24.1",
-    "@sinclair/typebox": "0.34.13"
+    "vitest": "^3.2.4",
+    "ws": "^8.21.0",
+    "zod": "3.24.1"
   },
   "keywords": [
     "tomoe",

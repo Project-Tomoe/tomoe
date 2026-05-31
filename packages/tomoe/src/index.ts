@@ -5,11 +5,9 @@
  *
  * @example
  * ```ts
- * import { Tomoe, relic, token, unite } from 'tomoejs'
+ * import { Tomoe, relic, unite } from 'tomoejs'
  *
- * const UserCtx = token<User>('user')
- *
- * const authRelic = relic(UserCtx, async (ctx) => {
+ * const authRelic = relic('user', async (ctx) => {
  *   const user = await db.verify(ctx.req.headers.get('authorization'))
  *   if (!user) return err(Unauthorized)
  *   return user
@@ -20,7 +18,7 @@
  * const app = new Tomoe()
  *
  * app.scope('/user', userAccess, (r) => {
- *   r.get('/me', (ctx) => ctx.json(ctx.relic(UserCtx)))
+ *   r.get('/me', (ctx) => ctx.json(ctx.user))
  * })
  *
  * export default app
@@ -32,8 +30,8 @@ export { Tomoe, Router } from "./tomoe"
 export type { Handler, Middleware, HTTPMethod, RouteOptions } from "./router/router"
 export { ScopedRouter } from "./router/router"
 
-export { Context, type TypedResponse } from "./context"
-export type { Env, ExecutionContext } from "./context"
+export { Context, type TypedResponse, UpgradeResponse } from "./context"
+export type { Env, ExecutionContext, SocketCtx, WebSocketHandlers } from "./context"
 export { createClient } from "./client"
 export type { Client } from "./client"
 
@@ -98,7 +96,7 @@ export type {
 } from "./types/inference"
 
 //  Version
-export const VERSION = "1.0.0-rc.2"
+export const VERSION = "1.0.0-rc.3"
 
 // Context types
 export type { CookieOptions } from "./context"
