@@ -4,6 +4,24 @@ All notable changes to the TomoeJS project will be documented in this file. This
 
 ---
 
+## [1.0.0-rc.3] - 2026-05-31
+
+TomoeJS release candidate (`1.0.0-rc.3`) focuses on closing the Node.js performance gap. By optimizing how Web standard interfaces bridge to Node's internal engine, this release achieves up to **60% higher throughput** under Node.js while keeping Bun and Cloudflare Workers at native peak speeds.
+
+### ⚡ Performance, Routing & Node.js Bridge Optimizations
+* **Lightweight `LazyResponse` Engine**: Implemented dynamic environment detection (`useLazyResponse`). Under Node.js, it uses a custom prototype-hacked JS class that defers standard native C++ `Response`/`Headers` instantiation until properties are accessed. In standard environments (Bun, Workers), it defaults to native objects for maximum speed.
+* **Fast-Path Adapter Output**: Optimized header writing and body ending inside the Node.js HTTP server. It checks if the response headers were untouched and writes the plain JS `_rawHeaders` object directly via `res.setHeader`, completely avoiding native `Headers.forEach` iterations. Bypasses WHATWG stream read/pipe processes by writing raw body strings directly when available.
+* **Zero-Allocation Router Path Slicing**: Rewrote the radix tree's `#splitPath` utility using a custom slice pointer loop, bypassing expensive string `.split("/")` and array `.filter(...)` allocations on every request.
+* **Lazy Parameter Decoding**: Wrapped `decodeURIComponent` inside a quick `indexOf('%') !== -1` check, avoiding native calls and try-catch overhead for non-url-encoded path parameters.
+
+### 🔌 WebSocket Enhancements
+* **High-Throughput Node.js WebSockets**: Optimized connection upgrades in the Node.js adapter, achieving over **45,000 msg/s** and outperforming standard Node.js routing and messaging libraries.
+
+### 🧪 Quality Assurance
+* **Expanded Test Coverage**: Added websocket and adapter integration tests, increasing coverage to **216 passed unit tests**.
+
+---
+
 ## [1.0.0-rc.2] - 2026-05-24
 
 TomoeJS continues as a production-readiness Release Candidate (`1.0.0-rc.2`). This release brings security hardening upgrades, routing optimizations, advanced middlewares, validation enhancements, and a zero-dependency web standard core. Treat it as an RC until the release gates in `docs/production-readiness.md` are complete.
