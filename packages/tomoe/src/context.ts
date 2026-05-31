@@ -15,10 +15,17 @@
 
 import type { ProvidingRelic } from "./relic/relic"
 import type { Prettify } from "./types/utils"
+import { LazyResponse } from "./lazy-response"
 
 export interface TypedResponse<T = any> extends Response {
   readonly __type?: T
 }
+
+const useLazyResponse =
+  typeof process !== "undefined" &&
+  process.versions &&
+  process.versions.node &&
+  !(process.versions as any).bun
 
 export interface CookieOptions {
   domain?: string
@@ -62,6 +69,44 @@ export type Env = Record<string, any>
  *  - P: Route parameters (from Path)
  *  - R: Relic context (from scope's unite() — populated at runtime)
  */
+function getRawHeaders(
+  initHeaders: any,
+  headersToSet: Array<[string, string]>,
+  contentType: string,
+  contentLength: string
+): Record<string, string> {
+  const raw: Record<string, string> = {}
+
+  if (initHeaders) {
+    if (typeof initHeaders.forEach === "function") {
+      initHeaders.forEach((val: string, key: string) => {
+        raw[key.toLowerCase()] = val
+      })
+    } else if (Array.isArray(initHeaders)) {
+      for (const [key, val] of initHeaders) {
+        raw[key.toLowerCase()] = val
+      }
+    } else {
+      for (const [key, val] of Object.entries(initHeaders)) {
+        raw[key.toLowerCase()] = val as string
+      }
+    }
+  }
+
+  for (const [key, val] of headersToSet) {
+    raw[key.toLowerCase()] = val
+  }
+
+  if (contentType) {
+    raw["content-type"] = contentType
+  }
+  if (contentLength) {
+    raw["content-length"] = contentLength
+  }
+
+  return raw
+}
+
 export class Context<
   E extends Env = Record<never, never>,
   P extends Record<string, string> = Record<never, never>,
@@ -87,12 +132,12 @@ export class Context<
    * Relic store — populated by the executor before the handler runs.
    * Keyed by Relic._id (Symbol) for collision-free access.
    */
-  private _relicStore: Map<symbol, any>
+  private _relicStore: Map<symbol, any> | null = null
 
   /**
    * Relic store by name — populated by executor for named relics.
    */
-  private _relicStoreByName: Map<string, any>
+  private _relicStoreByName: Map<string, any> | null = null
 
   /**
    * Cached parsed URL — avoids repeated new URL() calls.
@@ -114,6 +159,11 @@ export class Context<
   }> = []
 
   /**
+   * List of headers queued to be set in responses.
+   */
+  private _headersToSet: Array<[string, string]> = []
+
+  /**
    * Cache of parsed request cookies.
    */
   private _parsedCookies: Record<string, string> | null = null
@@ -126,9 +176,7 @@ export class Context<
   ) {
     this.req = req
     this._params = params
-    this._env = { ...env }
-    this._relicStore = new Map()
-    this._relicStoreByName = new Map()
+    this._env = env
 
     if (executionCtx) {
       this._executionCtx = executionCtx
@@ -202,10 +250,15 @@ export class Context<
   }
 
   /**
-   * Get request header (case-insensitive).
+   * Get request header (case-insensitive) or set response header.
    */
-  header(name: string): string | null {
-    return this.req.headers.get(name)
+  header(name: string): string | null
+  header(name: string, value: string): void
+  header(name: string, value?: string): string | null | void {
+    if (value === undefined) {
+      return this.req.headers.get(name)
+    }
+    this._headersToSet.push([name, value])
   }
 
   // Middleware env (set/get)
@@ -238,6 +291,7 @@ export class Context<
    * Called by the relic executor — not for user use.
    */
   _setRelic(id: symbol, value: any): void {
+    if (!this._relicStore) this._relicStore = new Map()
     this._relicStore.set(id, value)
   }
 
@@ -245,6 +299,7 @@ export class Context<
    * Internal: store a relic-provided value by relic name.
    */
   _setRelicByName(name: string, value: any): void {
+    if (!this._relicStoreByName) this._relicStoreByName = new Map()
     this._relicStoreByName.set(name, value)
   }
 
@@ -252,7 +307,7 @@ export class Context<
    * Internal: retrieve a relic-provided value by relic name.
    */
   _getRelicByName(name: string): any {
-    return this._relicStoreByName.get(name)
+    return this._relicStoreByName ? this._relicStoreByName.get(name) : undefined
   }
 
   /**
@@ -260,7 +315,7 @@ export class Context<
    * Called by the relic executor.
    */
   _getRelic(id: symbol): any {
-    return this._relicStore.get(id)
+    return this._relicStore ? this._relicStore.get(id) : undefined
   }
 
   /**
@@ -271,7 +326,7 @@ export class Context<
    * const user = ctx.relic(auth)  // typed as User
    */
   relic<T>(targetRelic: ProvidingRelic<any, T>): T {
-    const value = this._relicStore.get(targetRelic._id)
+    const value = this._relicStore ? this._relicStore.get(targetRelic._id) : undefined
 
     if (value === undefined) {
       throw new Error(
@@ -282,43 +337,104 @@ export class Context<
     return value as T
   }
 
-  private _injectHeaders(init?: ResponseInit): Headers {
+  _injectHeaders(init?: ResponseInit): Headers {
     const headers = new Headers(init?.headers)
+    for (const [name, val] of this._headersToSet) {
+      headers.set(name, val)
+    }
     for (const cookie of this._cookiesToSet) {
       headers.append("Set-Cookie", serializeCookie(cookie.name, cookie.value, cookie.options))
     }
     return headers
   }
 
+  static encoder = new TextEncoder()
+
   /**
    * JSON response.
    * Sets Content-Type: application/json automatically.
    */
   json<T = any>(data: T, init?: ResponseInit): TypedResponse<T> {
-    const headers = this._injectHeaders(init)
-    if (!headers.has("Content-Type")) {
-      headers.set("Content-Type", "application/json; charset=utf-8")
+    const bodyStr = JSON.stringify(data)
+
+    let res: any
+    if (useLazyResponse) {
+      const lenStr = Context.encoder.encode(bodyStr).length.toString()
+      const rawHeaders = getRawHeaders(
+        init?.headers,
+        this._headersToSet,
+        "application/json; charset=utf-8",
+        lenStr
+      )
+      let serializedCookies: string[] | null = null
+      if (this._cookiesToSet.length > 0) {
+        serializedCookies = this._cookiesToSet.map(cookie =>
+          serializeCookie(cookie.name, cookie.value, cookie.options)
+        )
+      }
+      res = new LazyResponse(bodyStr, init)
+      res._bodyStr = bodyStr
+      res._rawHeaders = rawHeaders
+      res._cookies = serializedCookies
+    } else {
+      const headers = this._injectHeaders(init)
+      if (!headers.has("Content-Type")) {
+        headers.set("Content-Type", "application/json; charset=utf-8")
+      }
+      if (!headers.has("Content-Length")) {
+        headers.set("Content-Length", Context.encoder.encode(bodyStr).length.toString())
+      }
+      res = new Response(bodyStr, {
+        status: 200,
+        ...init,
+        headers,
+      })
+      res._bodyStr = bodyStr
     }
-    return new Response(JSON.stringify(data), {
-      status: 200,
-      ...init,
-      headers,
-    }) as TypedResponse<T>
+
+    return res as TypedResponse<T>
   }
 
   /**
    * Plain text response.
    */
   text(text: string, init?: ResponseInit): Response {
-    const headers = this._injectHeaders(init)
-    if (!headers.has("Content-Type")) {
-      headers.set("Content-Type", "text/plain; charset=utf-8")
+    let res: any
+    if (useLazyResponse) {
+      const lenStr = Context.encoder.encode(text).length.toString()
+      const rawHeaders = getRawHeaders(
+        init?.headers,
+        this._headersToSet,
+        "text/plain; charset=utf-8",
+        lenStr
+      )
+      let serializedCookies: string[] | null = null
+      if (this._cookiesToSet.length > 0) {
+        serializedCookies = this._cookiesToSet.map(cookie =>
+          serializeCookie(cookie.name, cookie.value, cookie.options)
+        )
+      }
+      res = new LazyResponse(text, init)
+      res._bodyStr = text
+      res._rawHeaders = rawHeaders
+      res._cookies = serializedCookies
+    } else {
+      const headers = this._injectHeaders(init)
+      if (!headers.has("Content-Type")) {
+        headers.set("Content-Type", "text/plain; charset=utf-8")
+      }
+      if (!headers.has("Content-Length")) {
+        headers.set("Content-Length", Context.encoder.encode(text).length.toString())
+      }
+      res = new Response(text, {
+        status: 200,
+        ...init,
+        headers,
+      })
+      res._bodyStr = text
     }
-    return new Response(text, {
-      status: 200,
-      ...init,
-      headers,
-    })
+
+    return res as Response
   }
 
   /**
@@ -328,15 +444,42 @@ export class Context<
    * Escape user data before passing to this method.
    */
   html(html: string, init?: ResponseInit): Response {
-    const headers = this._injectHeaders(init)
-    if (!headers.has("Content-Type")) {
-      headers.set("Content-Type", "text/html; charset=utf-8")
+    let res: any
+    if (useLazyResponse) {
+      const lenStr = Context.encoder.encode(html).length.toString()
+      const rawHeaders = getRawHeaders(
+        init?.headers,
+        this._headersToSet,
+        "text/html; charset=utf-8",
+        lenStr
+      )
+      let serializedCookies: string[] | null = null
+      if (this._cookiesToSet.length > 0) {
+        serializedCookies = this._cookiesToSet.map(cookie =>
+          serializeCookie(cookie.name, cookie.value, cookie.options)
+        )
+      }
+      res = new LazyResponse(html, init)
+      res._bodyStr = html
+      res._rawHeaders = rawHeaders
+      res._cookies = serializedCookies
+    } else {
+      const headers = this._injectHeaders(init)
+      if (!headers.has("Content-Type")) {
+        headers.set("Content-Type", "text/html; charset=utf-8")
+      }
+      if (!headers.has("Content-Length")) {
+        headers.set("Content-Length", Context.encoder.encode(html).length.toString())
+      }
+      res = new Response(html, {
+        status: 200,
+        ...init,
+        headers,
+      })
+      res._bodyStr = html
     }
-    return new Response(html, {
-      status: 200,
-      ...init,
-      headers,
-    })
+
+    return res as Response
   }
 
   /**
@@ -344,12 +487,35 @@ export class Context<
    * Default: 302 (temporary). Pass 301 for permanent.
    */
   redirect(url: string, status: 301 | 302 = 302): Response {
-    const headers = this._injectHeaders()
-    headers.set("Location", url)
-    return new Response(null, {
-      status,
-      headers,
-    })
+    let res: any
+    if (useLazyResponse) {
+      const rawHeaders = getRawHeaders(
+        undefined,
+        [...this._headersToSet, ["Location", url]],
+        "",
+        ""
+      )
+      let serializedCookies: string[] | null = null
+      if (this._cookiesToSet.length > 0) {
+        serializedCookies = this._cookiesToSet.map(cookie =>
+          serializeCookie(cookie.name, cookie.value, cookie.options)
+        )
+      }
+      res = new LazyResponse(null, { status })
+      res._bodyStr = ""
+      res._rawHeaders = rawHeaders
+      res._cookies = serializedCookies
+    } else {
+      const headers = this._injectHeaders()
+      headers.set("Location", url)
+      res = new Response(null, {
+        status,
+        headers,
+      })
+      res._bodyStr = ""
+    }
+
+    return res as Response
   }
 
   /**
@@ -374,4 +540,48 @@ export class Context<
 export interface ExecutionContext {
   waitUntil(promise: Promise<any>): void
   passThroughOnException(): void
+}
+
+/**
+ * Lightweight Context for long-lived socket connections
+ */
+export interface SocketCtx<Params = Record<string, string>, Relics = Record<string, any>> {
+  params: Params
+  query: Record<string, string | string[]>
+  relics: Relics
+  handshake: {
+    headers: Record<string, string>
+    cookies: Record<string, string>
+    ip?: string
+  }
+}
+
+/**
+ * Unified WebSocket Event Handlers mapping to native callbacks
+ */
+export interface WebSocketHandlers<
+  WS = any,
+  Params = Record<string, string>,
+  Relics = Record<string, any>,
+> {
+  open?(ws: WS, sCtx: SocketCtx<Params, Relics>): void | Promise<void>
+  message?(ws: WS, message: any, sCtx: SocketCtx<Params, Relics>): void | Promise<void>
+  close?(ws: WS, sCtx: SocketCtx<Params, Relics>): void | Promise<void>
+  drain?(ws: WS, sCtx: SocketCtx<Params, Relics>): void | Promise<void>
+  error?(ws: WS, error: any, sCtx: SocketCtx<Params, Relics>): void | Promise<void>
+}
+
+/**
+ * Special response object returned by Tomoe routers to initiate a native connection upgrade.
+ */
+export class UpgradeResponse extends Response {
+  readonly isUpgrade = true
+
+  constructor(
+    public readonly socketHandlers: WebSocketHandlers<any, any, any>,
+    public readonly socketCtx: SocketCtx<any, any>,
+    init?: ResponseInit
+  ) {
+    super(null, { status: 200, ...init })
+  }
 }

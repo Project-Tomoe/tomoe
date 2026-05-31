@@ -16,6 +16,8 @@
  * No onError() needed unless you want custom behavior
  */
 
+import { LazyResponse } from "../lazy-response"
+
 export class HttpError extends Error {
   readonly status: number
   readonly details?: any
@@ -29,10 +31,35 @@ export class HttpError extends Error {
 
   toResponse(): Response {
     const body = this.details ? { error: this.message, ...this.details } : { error: this.message }
-    return new Response(JSON.stringify(body), {
-      status: this.status,
-      headers: { "Content-Type": "application/json; charset=utf-8" },
-    })
+    const bodyStr = JSON.stringify(body)
+    const len = new TextEncoder().encode(bodyStr).length
+    const useLazyResponse =
+      typeof process !== "undefined" &&
+      process.versions &&
+      process.versions.node &&
+      !(process.versions as any).bun
+
+    let res: any
+    if (useLazyResponse) {
+      res = new LazyResponse(bodyStr, {
+        status: this.status,
+      })
+      res._bodyStr = bodyStr
+      res._rawHeaders = {
+        "content-type": "application/json; charset=utf-8",
+        "content-length": len.toString()
+      }
+    } else {
+      res = new Response(bodyStr, {
+        status: this.status,
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          "Content-Length": len.toString()
+        },
+      })
+      res._bodyStr = bodyStr
+    }
+    return res
   }
 }
 
