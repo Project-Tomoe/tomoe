@@ -59,7 +59,21 @@ export class RadixTree {
    * @returns array of segments
    */
   #splitPath(path: string): string[] {
-    return path.split("/").filter((segment) => segment !== "")
+    const segments: string[] = []
+    let last = 0
+    const len = path.length
+    for (let i = 0; i < len; i++) {
+      if (path.charCodeAt(i) === 47) { // '/'
+        if (i > last) {
+          segments.push(path.slice(last, i))
+        }
+        last = i + 1
+      }
+    }
+    if (len > last) {
+      segments.push(path.slice(last))
+    }
+    return segments
   }
 
   /**
@@ -187,9 +201,13 @@ export class RadixTree {
       if (paramName) {
         const result = this.#matchSegments(node.paramChild, segments, index + 1, method)
         if (result) {
-          try {
-            result.params[paramName] = decodeURIComponent(segment)
-          } catch {
+          if (segment.indexOf("%") !== -1) {
+            try {
+              result.params[paramName] = decodeURIComponent(segment)
+            } catch {
+              result.params[paramName] = segment
+            }
+          } else {
             result.params[paramName] = segment
           }
           return result
