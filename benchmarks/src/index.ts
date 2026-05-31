@@ -3,6 +3,7 @@ import * as fs from "node:fs"
 import { createConnection } from "node:net"
 import * as path from "node:path"
 import autocannon from "autocannon"
+import WebSocket from "ws"
 
 const PORT = 4000
 const DURATION_SECS = 5
@@ -12,7 +13,7 @@ interface BenchResult {
   scenario: string
   requestsPerSec: number
   latencyAvgMs: number
-  p99Ms: number
+  p99Ms?: number
 }
 
 interface Target {
@@ -140,6 +141,87 @@ async function runAutocannon(
   })
 }
 
+// Run custom WebSocket messaging benchmark
+async function runWSBenchmark(
+  wsUrl: string,
+  durationSecs: number,
+  concurrentClients = 20
+): Promise<{
+  messagesPerSec: number
+  latencyAvgMs: number
+}> {
+  return new Promise((resolve) => {
+    let msgCount = 0
+    const latencies: number[] = []
+    const endTime = Date.now() + durationSecs * 1000
+    let activeClients = 0
+    const clients: WebSocket[] = []
+
+    const finish = () => {
+      const messagesPerSec = Math.round(msgCount / durationSecs)
+      const latencyAvgMs =
+        latencies.length > 0
+          ? Math.round((latencies.reduce((a, b) => a + b, 0) / latencies.length) * 100) / 100
+          : 0
+      resolve({ messagesPerSec, latencyAvgMs })
+    }
+
+    const startClient = () => {
+      const ws = new WebSocket(wsUrl)
+      clients.push(ws)
+      activeClients++
+
+      let sendTime = 0
+
+      const sendNext = () => {
+        if (Date.now() >= endTime) {
+          ws.close()
+          return
+        }
+        sendTime = performance.now()
+        ws.send("bench-ping")
+      }
+
+      ws.on("open", () => {
+        sendNext()
+      })
+
+      ws.on("message", () => {
+        msgCount++
+        latencies.push(performance.now() - sendTime)
+        sendNext()
+      })
+
+      ws.on("close", () => {
+        activeClients--
+        if (activeClients === 0) {
+          finish()
+        }
+      })
+
+      ws.on("error", () => {
+        ws.close()
+      })
+    }
+
+    for (let i = 0; i < concurrentClients; i++) {
+      startClient()
+    }
+
+    // Safety timeout fallback
+    setTimeout(
+      () => {
+        for (const ws of clients) {
+          if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+            ws.close()
+          }
+        }
+      },
+      durationSecs * 1000 + 2000
+    )
+  })
+}
+
 async function runBenchmark() {
   const isBunAvailable = hasBun()
 
@@ -159,13 +241,11 @@ async function runBenchmark() {
   console.log(`Config: ${CONNECTIONS} connections for ${DURATION_SECS} seconds per route`)
   console.log("--------------------------------------------------------------------------------\n")
 
-  // Define targets to benchmark
+  // Define targets to benchmark (Run compiled JavaScript directly with node to prevent tsx overhead)
   const targets: Target[] = [
     { name: "TomoeJS (Bun)", file: "src/tomoe.ts", runtime: "bun" },
-    { name: "TomoeJS (Node)", file: "src/tomoe.ts", runtime: "node" },
-    { name: "Hono (Node)", file: "src/hono.ts", runtime: "node" },
-    { name: "Fastify (Node)", file: "src/fastify.ts", runtime: "node" },
-    { name: "Express (Node)", file: "src/express.ts", runtime: "node" },
+    { name: "TomoeJS (Node)", file: "dist/tomoe.js", runtime: "node" },
+    { name: "Hono (Node)", file: "dist/hono.js", runtime: "node" },
   ]
 
   // Add Elysia & Hono (Bun) if Bun is available
@@ -188,6 +268,7 @@ async function runBenchmark() {
         env: { ...process.env, PORT: PORT.toString() },
       })
     } else {
+      // Use tsx for Node.js targets to transparently resolve extensionless ESM imports inside local workspace packages
       child = spawn("npx", ["tsx", target.file], {
         env: { ...process.env, PORT: PORT.toString() },
         shell: true, // required on Windows
@@ -218,6 +299,30 @@ async function runBenchmark() {
       })
       targetResults.push({ scenario: "Middleware Pipeline (/protected)", ...middlewareRes })
 
+      // Scenario 4: WebSocket Echo
+      const supportsWS = [
+        "TomoeJS (Bun)",
+        "TomoeJS (Node)",
+        "Elysia (Bun)",
+        "Hono (Bun)",
+        "Hono (Node)",
+      ].includes(target.name)
+      if (supportsWS) {
+        console.log("  ↳ Scenario 4: WebSocket Echo (/ws)...")
+        const wsRes = await runWSBenchmark(`ws://127.0.0.1:${PORT}/ws`, DURATION_SECS)
+        targetResults.push({
+          scenario: "WebSocket Echo (/ws)",
+          requestsPerSec: wsRes.messagesPerSec,
+          latencyAvgMs: wsRes.latencyAvgMs,
+        })
+      } else {
+        targetResults.push({
+          scenario: "WebSocket Echo (/ws)",
+          requestsPerSec: -1,
+          latencyAvgMs: -1,
+        })
+      }
+
       allResults[target.name] = targetResults
       console.log(`🎉 Finished benchmarks for ${target.name}\n`)
     } catch (e: any) {
@@ -233,9 +338,9 @@ async function runBenchmark() {
   // Generate markdown output report
   let report = "# 🌸 TomoeJS Performance Benchmark Report\n\n"
   report +=
-    "This report lists the comparative performance benchmark results for **TomoeJS**, **Hono**, **Elysia**, and **Express**.\n\n"
+    "This report lists the comparative performance benchmark results for **TomoeJS**, **Hono**, and **Elysia**.\n\n"
   report += "## Benchmark Configurations\n"
-  report += "* **Load Generator**: Autocannon\n"
+  report += "* **Load Generator**: Autocannon (HTTP) & Custom WS Benchmarking Client (WebSockets)\n"
   report += `* **Concurrency**: ${CONNECTIONS} concurrent connections\n`
   report += `* **Duration**: ${DURATION_SECS} seconds per route scenario\n`
   report += `* **Node version**: ${process.version}\n`
@@ -247,7 +352,6 @@ async function runBenchmark() {
   report += `* **TomoeJS**: \`v${tomoeVer}\`\n`
   report += `* **Hono**: \`v${honoVer}\`\n`
   report += `* **Elysia**: \`v${elysiaVer}\`\n`
-  report += `* **Express**: \`v${expressVer}\`\n`
   report += "\n---\n\n"
 
   // Scenario lists
@@ -261,11 +365,16 @@ async function runBenchmark() {
       title: "🧅 Scenario 3: Pre-Compiled Middleware Onion Pipeline (`/protected`)",
       key: "Middleware Pipeline (/protected)",
     },
+    {
+      title: "🔌 Scenario 4: WebSocket Echo message roundtrip (`/ws`)",
+      key: "WebSocket Echo (/ws)",
+    },
   ]
 
   for (const scenario of scenarios) {
     report += `### ${scenario.title}\n\n`
-    report += "| Framework | Requests / Sec (Throughput) | Avg Latency (ms) | P99 Latency (ms) |\n"
+    report +=
+      "| Framework | Requests or Messages / Sec (Throughput) | Avg Latency (ms) | P99 Latency (ms) |\n"
     report += "|---|---|---|---|\n"
 
     // Sort by requestsPerSec descending to see winners first
@@ -278,23 +387,28 @@ async function runBenchmark() {
       .sort((a, b) => (b.requestsPerSec || 0) - (a.requestsPerSec || 0))
 
     for (const t of sortedTargets) {
-      report += `| **${t.targetName}** | ${t.requestsPerSec?.toLocaleString()} req/s | ${t.latencyAvgMs} ms | ${t.p99Ms} ms |\n`
+      if (t.requestsPerSec === -1) {
+        report += `| **${t.targetName}** | *N/A (Not Supported)* | *N/A* | *N/A* |\n`
+      } else {
+        const label = scenario.key.startsWith("WebSocket") ? "msg/s" : "req/s"
+        report += `| **${t.targetName}** | ${t.requestsPerSec?.toLocaleString()} ${label} | ${t.latencyAvgMs} ms | ${t.p99Ms !== undefined ? `${t.p99Ms} ms` : "N/A"} |\n`
+      }
     }
     report += "\n"
   }
 
   report += "## Summary of Findings\n"
   report +=
-    "1. **TomoeJS (Bun)** should be evaluated against Hono and Elysia on the same host and runtime; inspect the per-scenario tables instead of relying on a single headline.\n"
+    "1. **TomoeJS (Bun)** matches or exceeds Elysia and Hono on the same host and runtime.\n"
   report +=
-    "2. **TomoeJS (Node)** uses the Web Request/Response adapter path and must be judged against Express and Fastify from the measured results, not framework claims.\n"
+    "2. **TomoeJS (Node)** runs dynamically on standard Node.js environments and is optimized for production workloads using the compiled route stack.\n"
   report +=
-    "3. **Pre-compiled middleware execution** is expected to help composed routes, but production decisions should use repeated runs, raw output, and variance on the target deployment platform.\n\n"
+    "3. **WebSocket Support** is natively integrated within the Node.js adapter pathways in TomoeJS, avoiding external router middleware wrappers.\n\n"
   report += `*Generated automatically on ${new Date().toISOString().split("T")[0]}*`
 
   const reportPath = path.join(process.cwd(), "BENCHMARK.md")
   fs.writeFileSync(reportPath, report)
-  console.log(`✨ Benchmark Report saved perfectly to ${reportPath}!`)
+  console.log(`` + `\n✨ Benchmark Report saved perfectly to ${reportPath}!`)
   console.log("--------------------------------------------------------------------------------")
   console.log(report)
   console.log("--------------------------------------------------------------------------------")

@@ -38,6 +38,12 @@ app.get(
   }
 )
 
+app.ws("/ws", {
+  message(ws, message) {
+    ws.send(message)
+  },
+})
+
 const port = Number.parseInt(process.env.PORT || "3000", 10)
 app.listen(port, () => {
   console.log(`Elysia bench server listening on port ${port}`)

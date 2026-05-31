@@ -1,4 +1,4 @@
-import { Tomoe, Unauthorized, createServer, err, relic } from "tomoejs"
+import { Tomoe, Unauthorized, createServer, err, relic, UpgradeResponse } from "tomoejs"
 
 const app = new Tomoe()
 
@@ -40,15 +40,47 @@ app.get("/protected", (ctx) => {
   return ctx.json({ secret: "tomoe-confidential-data" })
 })
 
+app.ws("/ws", {
+  message(ws, message) {
+    ws.send(message)
+  },
+})
+
 app.compile()
 
 const port = Number.parseInt(process.env.PORT || "3000", 10)
 
 if (typeof Bun !== "undefined") {
-  // Native Bun.serve entry path for extreme Bun speed
-  Bun.serve({
+  // Native Bun.serve entry path for extreme Bun speed with full WebSocket support
+  const server: any = (Bun as any).serve({
     port,
-    fetch: (req) => app.fetch(req),
+    async fetch(req: any) {
+      const res = await app.fetch(req)
+      if (res && (res as any).isUpgrade) {
+        const success = server.upgrade(req, {
+          data: {
+            handlers: (res as any).socketHandlers,
+            socketCtx: (res as any).socketCtx,
+          },
+        })
+        if (success) return undefined
+      }
+      return res
+    },
+    websocket: {
+      open(ws: any) {
+        ws.data.handlers.open?.(ws, ws.data.socketCtx)
+      },
+      message(ws: any, data: any) {
+        ws.data.handlers.message?.(ws, data, ws.data.socketCtx)
+      },
+      close(ws: any) {
+        ws.data.handlers.close?.(ws, ws.data.socketCtx)
+      },
+      drain(ws: any) {
+        ws.data.handlers.drain?.(ws, ws.data.socketCtx)
+      },
+    },
   })
   console.log(`TomoeJS native Bun server listening on port ${port}`)
 } else {
