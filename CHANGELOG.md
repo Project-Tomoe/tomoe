@@ -6,7 +6,10 @@ All notable changes to the TomoeJS project will be documented in this file. This
 
 ## [1.0.0-rc.3] - 2026-05-31
 
-TomoeJS release candidate (`1.0.0-rc.3`) focuses on closing the Node.js performance gap. By optimizing how Web standard interfaces bridge to Node's internal engine, this release achieves up to **60% higher throughput** under Node.js while keeping Bun and Cloudflare Workers at native peak speeds.
+TomoeJS release candidate (`1.0.0-rc.3`) introduces **first-class, native WebSocket support** across both Node.js and Bun runtimes, and focuses on closing the Node.js performance gap. By optimizing how Web standard interfaces bridge to Node's internal engine, this release achieves up to **60% higher throughput** under Node.js while keeping Bun and Cloudflare Workers at native peak speeds.
+
+### 🌸 Key Highlights & New Features
+* **Universal WebSocket API**: Implemented a unified native WebSocket routing API (`app.ws(path, handlers)`) supporting custom handshake authorization hooks, parameters, and relics on both Bun (native) and Node.js (bridged via `ws` adapter).
 
 ### ⚡ Performance, Routing & Node.js Bridge Optimizations
 * **Lightweight `LazyResponse` Engine**: Implemented dynamic environment detection (`useLazyResponse`). Under Node.js, it uses a custom prototype-hacked JS class that defers standard native C++ `Response`/`Headers` instantiation until properties are accessed. In standard environments (Bun, Workers), it defaults to native objects for maximum speed.
