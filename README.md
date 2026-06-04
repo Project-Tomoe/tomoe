@@ -48,16 +48,16 @@ Install TomoeJS using your preferred package manager:
 
 ```bash
 # npm
-npm install tomoejs
+npm install tomoejs@rc
 
 # pnpm
-pnpm add tomoejs
+pnpm add tomoejs@rc
 
 # bun
-bun add tomoejs
+bun add tomoejs@rc
 
 # yarn
-yarn add tomoejs
+yarn add tomoejs@rc
 ```
 
 ---
